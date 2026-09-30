@@ -1,0 +1,39 @@
+# Contexto de build: lo que no hace falta (y estorba) dentro de la imagen.
+# Mantenerlo pequeño hace la imagen más rápida de construir y más segura.
+
+.git
+.gitignore
+.github
+
+# Documentación y especificación: no se usan en runtime.
+SPEC.md
+tasks/
+README.md
+LICENSE
+
+# Entorno local y secretos: NUNCA deben entrar en la imagen.
+.env
+.env.*
+.venv
+venv/
+
+# Datos de docker compose
+docker-compose.yml
+.data/
+
+# Tests y calidad: la imagen final no los necesita (uv sync --no-dev).
+app/tests
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+coverage.xml
+htmlcov
+
+# Sistema operativo y editores
+__pycache__
+*.py[cod]
+*.egg-info
+.vscode
+.idea
+.DS_Store
