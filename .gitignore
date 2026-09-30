@@ -216,3 +216,23 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- PaperSoul ----------------------------------------------------------------
+
+# Archivos .env. El patrón con wildcard cubre también `.env.local` y
+# `.env.production`, que el patrón `.env` de más arriba NO ignoraba y que
+# acabarían en el repositorio con credenciales de Mongo dentro. Sólo la
+# plantilla se versiona (SPEC.md §7 → Boundaries → Nunca).
+.env
+.env.*
+!.env.example
+
+# Datos locales de Mongo montados por docker compose
+.data/
+
+# Informes de cobertura y reportes de test
+.coverage
+coverage.xml
+htmlcov/
+junit.xml
+

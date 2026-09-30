@@ -1,0 +1,125 @@
+[project]
+name = "papersoul-persistencia"
+version = "0.1.0"
+description = "Microservicio de persistencia y consulta de documentos PDF procesados (PaperSoul)"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "fastapi>=0.142,<0.143",
+    "uvicorn[standard]>=0.34",
+    "pydantic>=2.9,<3.0",
+    "pydantic-settings>=2.6",
+    # Beanie 2.0 eliminó Motor y migró a pymongo.AsyncMongoClient. Este pin exacto
+    # es lo que mantiene coherente el stack elegido. Ver SPEC.md §2.1.
+    "beanie==1.30.0",
+    "motor>=3.6,<4.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=1.0",
+    "pytest-cov>=6.0",
+    "httpx>=0.28",
+    "asgi-lifespan>=2.1",
+    "testcontainers[mongo]>=4.9",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# --- RUFF -------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["app"]
+# Los bloques ```python dentro de los .md son ejemplos de documentación, no código
+# ejecutable: ruff 0.16 los formatea y eso no debe ser un gate de build.
+extend-exclude = ["*.md", "uv.lock"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "SIM",  # simplify
+    "RUF",  # ruff-specific
+    "ASYNC",# asyncio
+    "ARG",  # unused arguments
+    "PT",   # pytest style
+    "PTH",  # use pathlib
+]
+ignore = [
+    "E501",    # el formatter ya gestiona el largo de línea
+    "B008",    # Depends()/Query() en defaults es idiomático en FastAPI
+    "RUF012",  # ClassVar explícito es ruido en dataclasses de config
+]
+
+[tool.ruff.lint.per-file-ignores]
+"app/tests/*" = [
+    "ARG001",  # fixtures sin usar en tests son normales
+    "ARG002",
+    "S101",    # (reservado si se añade bandit) assert permitido en tests
+    "PT011",   # pytest.raises sin match es válido en tests de excepción
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+# --- MYPY -------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+plugins = ["pydantic.mypy"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = false
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+exclude = ["^app/tests/"]
+
+[[tool.mypy.overrides]]
+module = ["beanie.*", "motor.*", "pymongo.*", "testcontainers.*"]
+ignore_missing_imports = true
+
+# --- PYTEST -----------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["app/tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "--strict-markers --strict-config"
+markers = [
+    "integration: requiere MongoDB real vía Testcontainers (Docker)",
+]
+
+# --- COVERAGE ---------------------------------------------------------------
+[tool.coverage.run]
+source = ["app"]
+branch = true
+omit = [
+    "app/tests/*",
+    "app/main.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@abstractmethod",
+]
