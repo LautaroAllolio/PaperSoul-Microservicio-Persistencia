@@ -46,6 +46,47 @@ class DuplicateResourceException(PaperSoulError):
         self.resource_name = resource_name
 
 
+class UnsupportedMediaTypeException(PaperSoulError):
+    """El `Content-Type` declarado no es `application/json`.
+
+    415 y no 400: RFC 9110 §15.5.16 reserva el 415 para "el formato de los datos no
+    está soportado por el servidor", mientras que un 400 afirmaría que el servidor
+    *entendió* el `Content-Type` y lo rechazó, que es falso.
+
+    La comparación es por media type, no por cabecera entera: `application/json;
+    charset=utf-8` es JSON válido, y rechazarlo rompe clientes HTTP bien
+    configurados (SPEC.md D-2, SC-21).
+    """
+
+    status_code = 415
+    problem_type = ProblemType.UNSUPPORTED_MEDIA_TYPE
+    title = "Tipo de medio no soportado"
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.resource_name = RESOURCE_NAME
+
+
+class MalformedJsonException(PaperSoulError):
+    """El body no es JSON sintácticamente válido.
+
+    400 y no 422: un 422 significa "entendí el JSON y violaste las reglas", y aquí el
+    servidor no llegó a entender nada. Un cliente que reintenta ante un 422, pensando
+    en un dato corregible, no tiene nada que corregir.
+
+    Se distingue de `RequestValidationError` porque este ultimo llega de Pydantic con
+    los campos ya leidos; este llega de `json.JSONDecodeError` (SPEC.md seccion 5.3).
+    """
+
+    status_code = 400
+    problem_type = ProblemType.MALFORMED_JSON
+    title = "JSON malformado"
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.resource_name = RESOURCE_NAME
+
+
 class InvalidDocumentIdException(PaperSoulError):
     """El identificador no tiene el formato de un ObjectId de MongoDB.
 

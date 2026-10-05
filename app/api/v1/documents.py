@@ -14,7 +14,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query, Response, status
 
-from app.api.dependencies import get_document_service
+from app.api.dependencies import get_document_service, require_json_content_type
+from app.api.openapi_problem import problem_responses
 from app.models.pdf_document import SHA256_HEX, StoredDocument
 from app.repositories.base import Page
 from app.schemas.document import (
@@ -37,28 +38,42 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
 
+# `Depends` con valor de retorno `None`: no inyecta nada en la firma, solo comprueba.
+# Se declara antes que el body a proposito, para que el 415 gane al 422 cuando ambos
+# aplicarian (SPEC.md SC-21).
+JSONBodyDep = Annotated[None, Depends(require_json_content_type)]
+
 
 @router.post(
     "",
     response_model=DocumentPersistedResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Persiste un documento ya procesado",
-    responses={
-        status.HTTP_409_CONFLICT: {"description": "El pdf_hash ya está persistido"},
-        status.HTTP_415_UNSUPPORTED_MEDIA_TYPE: {"description": "El body no es JSON"},
-        HTTP_422_UNPROCESSABLE_CONTENT: {"description": "El body no cumple el contrato"},
-    },
+    responses=problem_responses(
+        {
+            status.HTTP_400_BAD_REQUEST: "El body no es JSON sintacticamente valido",
+            status.HTTP_409_CONFLICT: "El pdf_hash ya esta persistido",
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE: "El body no es JSON",
+            HTTP_422_UNPROCESSABLE_CONTENT: "El body no cumple el contrato",
+            status.HTTP_500_INTERNAL_SERVER_ERROR: "Error no controlado",
+        }
+    ),
 )
 async def create_document(
+    _json_body: JSONBodyDep,
     payload: DocumentCreateRequest,
     response: Response,
     service: DocumentServiceDep,
 ) -> DocumentPersistedResponse:
     """US-2: guarda el documento y confirma con la cabecera `Location`.
 
-    El `Location` no es adorno: es lo que permite al cliente pedir el recurso recién
+    El `Location` no es adorno: es lo que permite al cliente pedir el recurso recien
     creado sin construir la URL a mano, y de paso fija la forma de esa URL en el
     servidor, que es quien debe decidirla.
+
+    `_json_body` no se usa: es la dependencia que devuelve 415 si el `Content-Type` no
+    es JSON. Se llama con guion bajo inicial para dejar claro en la firma que es un
+    efecto, no un dato de entrada.
     """
     stored = await service.create(payload)
     response.headers["Location"] = f"/api/v1/documents/{stored.id}"
@@ -74,6 +89,14 @@ async def create_document(
     "/by-hash/{pdf_hash}",
     response_model=HashExistsResponse,
     summary="Consulta si un pdf_hash ya está persistido",
+    responses=problem_responses(
+        {
+            status.HTTP_400_BAD_REQUEST: "El pdf_hash no tiene el formato exigido",
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE: "El body no es JSON",
+            HTTP_422_UNPROCESSABLE_CONTENT: "El pdf_hash no cumple el patron",
+            status.HTTP_500_INTERNAL_SERVER_ERROR: "Error no controlado",
+        }
+    ),
 )
 async def check_hash_exists(
     pdf_hash: Annotated[str, Path(pattern=SHA256_HEX, description="SHA-256 hex en minúsculas")],
@@ -93,6 +116,12 @@ async def check_hash_exists(
     "",
     response_model=DocumentListResponse,
     summary="Lista documentos del más nuevo al más viejo",
+    responses=problem_responses(
+        {
+            HTTP_422_UNPROCESSABLE_CONTENT: "limit u offset fuera de rango",
+            status.HTTP_500_INTERNAL_SERVER_ERROR: "Error no controlado",
+        }
+    ),
 )
 async def list_documents(
     service: DocumentServiceDep,
@@ -114,9 +143,18 @@ async def list_documents(
     "/{doc_id}",
     response_model=DocumentResponse,
     summary="Lee un documento por id",
-    responses={status.HTTP_404_NOT_FOUND: {"description": "No existe ese documento"}},
+    responses=problem_responses(
+        {
+            status.HTTP_400_BAD_REQUEST: "El doc_id no es un ObjectId valido",
+            status.HTTP_404_NOT_FOUND: "No existe ese documento",
+            status.HTTP_500_INTERNAL_SERVER_ERROR: "Error no controlado",
+        }
+    ),
 )
-async def get_document(doc_id: str, service: DocumentServiceDep) -> DocumentResponse:
+async def get_document(
+    doc_id: str,
+    service: DocumentServiceDep,
+) -> DocumentResponse:
     """SC-06: 404 si no existe, 400 si el id no tiene forma de ObjectId.
 
     Los dos cortes los hace el repositorio antes de tocar Mongo, así que aquí no hay
@@ -131,7 +169,13 @@ async def get_document(doc_id: str, service: DocumentServiceDep) -> DocumentResp
     "/{doc_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Elimina un documento por id",
-    responses={status.HTTP_404_NOT_FOUND: {"description": "No existe ese documento"}},
+    responses=problem_responses(
+        {
+            status.HTTP_400_BAD_REQUEST: "El doc_id no es un ObjectId valido",
+            status.HTTP_404_NOT_FOUND: "No existe ese documento",
+            status.HTTP_500_INTERNAL_SERVER_ERROR: "Error no controlado",
+        }
+    ),
 )
 async def delete_document(doc_id: str, service: DocumentServiceDep) -> Response:
     """US-4 y SC-08: 204 sin cuerpo, 404 si no estaba.

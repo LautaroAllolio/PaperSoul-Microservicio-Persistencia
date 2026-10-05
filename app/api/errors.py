@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.problem_types import ProblemType
 from app.exceptions.base import PaperSoulError
+from app.exceptions.domain import MalformedJsonException
 from app.schemas.problem import PROBLEM_JSON, InvalidParam, ProblemDetail
 
 logger = logging.getLogger(__name__)
@@ -74,9 +75,34 @@ async def paper_soul_error_handler(request: Request, exc: Exception) -> JSONResp
 
 
 async def request_validation_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Traduce un fallo de validación del body o de los query params a 422."""
+    """Traduce un fallo de validación del body o de los query params a 422.
+
+    Hay una excepción a la regla y es deliberada: un error de tipo `json_invalid` se
+    traduce a **400 malformed-json** en vez de a 422. El servidor no llegó a entender
+    el body, así que no puede afirmar que violó las reglas. Sin esta bifurcación, un
+    cliente que reintenta ante un 422, pensando en un dato corregible, se queda
+    reintentando con un JSON que nunca va a parsear (SPEC.md seccion 5.3).
+    """
     assert isinstance(exc, RequestValidationError)
     trace_id = new_trace_id()
+    errors = exc.errors()
+
+    if any(error["type"] == "json_invalid" for error in errors):
+        # Se instancia la excepcion para leer sus atributos en vez de repetir aqui el
+        # `type` y el `title`. Duplicarlos seria una segunda fuente de verdad que
+        # divergiria en silencio en cuanto el contrato cambiara, y el fallo apareceria
+        # como un `type` desconocido en un cliente, no como un test rojo.
+        malformed = MalformedJsonException("El cuerpo de la peticion no es JSON valido.")
+        return problem_response(
+            ProblemDetail(
+                type=malformed.problem_type,
+                title=malformed.title,
+                status=malformed.status_code,
+                detail=malformed.detail,
+                instance=request.url.path,
+                trace_id=trace_id,
+            )
+        )
 
     return problem_response(
         ProblemDetail(
@@ -85,7 +111,7 @@ async def request_validation_error_handler(request: Request, exc: Exception) -> 
             status=422,
             instance=request.url.path,
             trace_id=trace_id,
-            invalid_params=[_to_invalid_param(error) for error in exc.errors()],
+            invalid_params=[_to_invalid_param(error) for error in errors],
         )
     )
 
