@@ -2,14 +2,14 @@
 
 Capa 3. El servicio habla con este contrato, nunca con Mongo directamente.
 
-Estos tests **no requieren Mongo**: verifican el contrato y su semÃ¡ntica, no que
+Estos tests **no requieren Mongo**: verifican el contrato y su semántica, no que
 Mongo obedezca. Eso lo comprueba `tests/integration/` contra una instancia real.
-La separaciÃ³n es deliberada (Â§8.1): si toda la suite dependiera de Docker,
-dejarÃ­a de correr en cada commit, que es cuando un test vale algo.
+La separación es deliberada (§8.1): si toda la suite dependiera de Docker,
+dejaría de correr en cada commit, que es cuando un test vale algo.
 
-`FakePdfRepository` es una implementaciÃ³n de primera clase del mismo contrato,
-escrita a mano y no con `unittest.mock` (Â§8.2): un `Mock` que devuelve lo que el
-test espera pasa aunque el cÃ³digo real estÃ© roto; un fake con la unicidad
+`FakePdfRepository` es una implementación de primera clase del mismo contrato,
+escrita a mano y no con `unittest.mock` (§8.2): un `Mock` que devuelve lo que el
+test espera pasa aunque el código real esté roto; un fake con la unicidad
 implementada de verdad puede fallar.
 """
 
@@ -36,7 +36,7 @@ MISSING_OBJECT_ID = "507f1f77bcf86cd799439099"
 
 
 def make_fields(pdf_hash: str = HASH_A, **overrides: object) -> PdfDocumentFields:
-    """Campos de un documento vÃ¡lido, para poder construirlo sin base de datos."""
+    """Campos de un documento válido, para poder construirlo sin base de datos."""
     fields: dict[str, object] = {
         "filename": f"{pdf_hash[:8]}.pdf",
         "extracted_text": "texto",
@@ -49,17 +49,17 @@ def make_fields(pdf_hash: str = HASH_A, **overrides: object) -> PdfDocumentField
 
 
 def utc(year: int, month: int, day: int) -> datetime:
-    """Fecha UTC explÃ­cita. Se evita `datetime.now()` con offsets relativos porque
-    hace los tests dependientes del instante de ejecuciÃ³n.
+    """Fecha UTC explícita. Se evita `datetime.now()` con offsets relativos porque
+    hace los tests dependientes del instante de ejecución.
     """
     return datetime(year, month, day, tzinfo=UTC)
 
 
 async def test_fake_implements_the_repository_contract() -> None:
-    """El fake implementa el mismo contrato que la implementaciÃ³n real.
+    """El fake implementa el mismo contrato que la implementación real.
 
-    Si no lo hiciera, los tests del servicio pasarÃ­an contra un doble que se
-    comporta de otra manera, y el bug aparecerÃ­a sÃ³lo contra Mongo.
+    Si no lo hiciera, los tests del servicio pasarían contra un doble que se
+    comporta de otra manera, y el bug aparecería sólo contra Mongo.
     """
     assert isinstance(FakePdfRepository(), PdfRepository)
 
@@ -77,15 +77,15 @@ async def test_created_document_can_be_read_back_by_hash() -> None:
 
 async def test_unknown_hash_returns_none_rather_than_raising() -> None:
     """No encontrar no es un error: es la respuesta normal de `by-hash`, que
-    responde 200 con `exists: false`. Lanzar aquÃ­ obligarÃ­a al servicio a
+    responde 200 con `exists: false`. Lanzar aquí obligaría al servicio a
     distinguir dos casos que el endpoint trata igual.
     """
     assert await FakePdfRepository().get_by_hash(HASH_A) is None
 
 
 async def test_get_by_hash_is_case_sensitive() -> None:
-    """D-1: los hashes son minÃºsculas siempre. Si el lookup no distinguiera mayÃºsculas,
-    un productor que mandara el hash en mayÃºsculas encontrarÃ­a un documento en
+    """D-1: los hashes son minúsculas siempre. Si el lookup no distinguiera mayúsculas,
+    un productor que mandara el hash en mayúsculas encontraría un documento en
     lugar de recibir un 422 que le diga que su bug es real.
     """
     repository = FakePdfRepository()
@@ -99,7 +99,7 @@ async def test_creating_the_same_hash_twice_raises_duplicate() -> None:
 
     La unicidad la impone la base de datos, no un `if` en el servicio: entre dos
     peticiones concurrentes, un `get_by_hash` seguido de `create` deja pasar las
-    dos, y la deduplicaciÃ³n se rompe justo cuando mÃ¡s importa.
+    dos, y la deduplicación se rompe justo cuando más importa.
     """
     repository = FakePdfRepository()
     await repository.create(make_fields(HASH_A))
@@ -110,7 +110,7 @@ async def test_creating_the_same_hash_twice_raises_duplicate() -> None:
 
 async def test_duplicates_are_detected_by_hash_not_by_filename() -> None:
     """Dos archivos distintos con el mismo nombre no chocan: el nombre no es clave
-    de unicidad y confundirlo rechazarÃ­a subidas legÃ­timas.
+    de unicidad y confundirlo rechazaría subidas legítimas.
     """
     repository = FakePdfRepository()
     await repository.create(make_fields(HASH_A, filename="contrato.pdf"))
@@ -128,8 +128,8 @@ async def test_get_by_id_returns_the_stored_document() -> None:
 
 
 async def test_get_by_id_on_a_valid_but_missing_id_raises_not_found() -> None:
-    """SC-06: ObjectId vÃ¡lido e inexistente es 404. El servicio traduce esta
-    excepciÃ³n; el repositorio sÃ³lo seÃ±ala que no estÃ¡.
+    """SC-06: ObjectId válido e inexistente es 404. El servicio traduce esta
+    excepción; el repositorio sólo señala que no está.
     """
     with pytest.raises(ResourceNotFoundException):
         await FakePdfRepository().get_by_id(MISSING_OBJECT_ID)
@@ -137,7 +137,7 @@ async def test_get_by_id_on_a_valid_but_missing_id_raises_not_found() -> None:
 
 async def test_get_by_id_on_a_malformed_id_raises_invalid_id() -> None:
     """SC-06: un id que no es ObjectId es 400, y se detecta **antes** de tocar
-    Mongo. Consultar con un id invÃ¡lido convierte un error del cliente en un 500.
+    Mongo. Consultar con un id inválido convierte un error del cliente en un 500.
     """
     with pytest.raises(InvalidDocumentIdException):
         await FakePdfRepository().get_by_id("no-es-un-objectid")
@@ -158,11 +158,11 @@ async def test_listing_returns_newest_first() -> None:
 
 async def test_listing_breaks_uploaded_at_ties_by_id_descending() -> None:
     """SC-05, el criterio exacto: con `uploaded_at` repetido, `_id` desempata sin
-    repetir ni perder Ã­tems entre pÃ¡ginas.
+    repetir ni perder ítems entre páginas.
 
-    Es el caso que vuelve inÃºtil un orden por `uploaded_at` a secas: dos documentos
+    Es el caso que vuelve inútil un orden por `uploaded_at` a secas: dos documentos
     con el mismo milisegundo empatan, y el orden puede cambiar entre dos peticiones
-    idÃ©nticas, con lo que un cliente que pagina ve documentos repetidos o saltados.
+    idénticas, con lo que un cliente que pagina ve documentos repetidos o saltados.
     """
     repository = FakePdfRepository()
     same_moment = utc(2026, 2, 2)
@@ -190,11 +190,11 @@ async def test_pagination_returns_the_requested_window() -> None:
 
 
 async def test_windows_of_pagination_do_not_overlap_or_skip() -> None:
-    """SC-05 sobre el criterio observable: recorrer la colecciÃ³n por pÃ¡ginas de 2
+    """SC-05 sobre el criterio observable: recorrer la colección por páginas de 2
     entrega cada documento exactamente una vez y en el mismo orden.
 
     Es la propiedad que un `sort` no determinista rompe, y la que un test de una
-    sola pÃ¡gina no detectarÃ­a.
+    sola página no detectaría.
     """
     repository = FakePdfRepository()
     for index in range(6):
@@ -209,11 +209,11 @@ async def test_windows_of_pagination_do_not_overlap_or_skip() -> None:
 
 
 async def test_total_counts_the_whole_collection_not_the_window() -> None:
-    """`total` es el total de la colecciÃ³n, no el tamaÃ±o de la pÃ¡gina.
+    """`total` es el total de la colección, no el tamaño de la página.
 
-    Confundirlo hace que un cliente que pagina por `offset` se salte el final: verÃ­a
-    la Ãºltima pÃ¡gina con `total` igual al tamaÃ±o de la ventana y concluirÃ­a que ya
-    no hay mÃ¡s.
+    Confundirlo hace que un cliente que pagina por `offset` se salte el final: vería
+    la última página con `total` igual al tamaño de la ventana y concluiría que ya
+    no hay más.
     """
     repository = FakePdfRepository()
     for index in range(5):
@@ -226,8 +226,8 @@ async def test_total_counts_the_whole_collection_not_the_window() -> None:
 
 
 async def test_offset_past_the_end_returns_an_empty_page_rather_than_raising() -> None:
-    """Pedir la pÃ¡gina 99 de una colecciÃ³n de 1 documento devuelve vacÃ­o con el
-    `total` correcto. Un error obligarÃ­a al cliente a manejar un caso mÃ¡s.
+    """Pedir la página 99 de una colección de 1 documento devuelve vacío con el
+    `total` correcto. Un error obligaría al cliente a manejar un caso más.
     """
     repository = FakePdfRepository()
     await repository.create(make_fields(HASH_A))
@@ -251,8 +251,8 @@ async def test_delete_removes_the_document() -> None:
 async def test_deleting_twice_raises_not_found() -> None:
     """SC-08: la segunda llamada al `DELETE` da 404, no un 204 idempotente.
 
-    Es una decisiÃ³n, no un descuido: 204 en la segunda llamada harÃ­a que un
-    cliente que reintenta por timeout no pudiera distinguir "borrado por mÃ­" de
+    Es una decisión, no un descuido: 204 en la segunda llamada haría que un
+    cliente que reintenta por timeout no pudiera distinguir "borrado por mí" de
     "borrado por otro".
     """
     repository = FakePdfRepository()
@@ -269,9 +269,9 @@ async def test_deleting_a_malformed_id_raises_invalid_id() -> None:
 
 
 async def test_hash_becomes_reusable_after_deletion() -> None:
-    """El Ã­ndice Ãºnico sigue existiendo tras un borrado, asÃ­ que el mismo PDF se
+    """El índice único sigue existiendo tras un borrado, así que el mismo PDF se
     puede volver a subir. Si el repositorio no lo permitiera, un cliente que
-    reintenta una subida fallida se quedarÃ­a bloqueado para siempre.
+    reintenta una subida fallida se quedaría bloqueado para siempre.
     """
     repository = FakePdfRepository()
     created = await repository.create(make_fields(HASH_A))
@@ -283,7 +283,7 @@ async def test_hash_becomes_reusable_after_deletion() -> None:
 
 
 async def test_stored_document_carries_the_id_and_the_domain_fields() -> None:
-    """`StoredDocument` es lo que devuelve el repositorio: los campos de dominio mÃ¡s
+    """`StoredDocument` es lo que devuelve el repositorio: los campos de dominio más
     el id. Se comprueba que un id con formato de ObjectId es aceptable, que es lo
     que el repositorio real devuelve.
     """
@@ -304,9 +304,9 @@ async def test_fake_ids_look_like_object_ids() -> None:
 
 
 async def test_fake_ids_increase_monotonically() -> None:
-    """Como los ObjectId reales, los ids del fake ordenan por antigÃ¼edad. El test de
-    desempate de `uploaded_at` depende de ello, asÃ­ que se fija explÃ­citamente en
-    vez de dejarlo como una casualidad de la implementaciÃ³n.
+    """Como los ObjectId reales, los ids del fake ordenan por antigüedad. El test de
+    desempate de `uploaded_at` depende de ello, así que se fija explícitamente en
+    vez de dejarlo como una casualidad de la implementación.
     """
     repository = FakePdfRepository()
     ids = []
@@ -319,8 +319,8 @@ async def test_fake_ids_increase_monotonically() -> None:
 
 async def test_timestamps_survive_the_round_trip() -> None:
     """D-2 y SC-07: lo que sale del repositorio conserva el offset UTC. Un naive en
-    este punto se convertirÃ­a en hora local al serializar, y el mismo documento
-    responderÃ­a distinto segÃºn dÃ³nde corra el servicio.
+    este punto se convertiría en hora local al serializar, y el mismo documento
+    respondería distinto según dónde corra el servicio.
     """
     repository = FakePdfRepository()
     moment = utc(2026, 7, 1)

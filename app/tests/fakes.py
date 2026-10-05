@@ -1,13 +1,13 @@
 """Fakes de prueba: implementaciones en memoria de los contratos de datos.
 
-Se escriben a mano, **no con `unittest.mock`** (SPEC.md Â§8.2). La razÃ³n es
+Se escriben a mano, **no con `unittest.mock`** (SPEC.md §8.2). La razón es
 concreta: un `Mock` configurado con `return_value=lo_que_el_test_espera` pasa
-aunque el cÃ³digo real estÃ© roto, porque no ejecuta nada. Un fake con la regla de
-unicidad implementada de verdad puede fallar, que es lo Ãºnico que lo hace Ãºtil.
+aunque el código real esté roto, porque no ejecuta nada. Un fake con la regla de
+unicidad implementada de verdad puede fallar, que es lo único que lo hace útil.
 
-Consecuencia prÃ¡ctica: `FakePdfRepository` **falla** cuando el contrato cambia, y
+Consecuencia práctica: `FakePdfRepository` **falla** cuando el contrato cambia, y
 `isinstance(fake, PdfRepository)` en los tests lo detecta antes de que se llegue a
-la implementaciÃ³n real.
+la implementación real.
 """
 
 from itertools import count
@@ -23,11 +23,11 @@ from app.repositories.pdf_repository import PdfRepository
 
 OBJECT_ID_HEX_LENGTH = 24
 
-# Contador monÃ³tono para generar ids. Se usa en vez de `uuid4()` porque los
+# Contador monótono para generar ids. Se usa en vez de `uuid4()` porque los
 # ObjectId de Mongo **crecen con el tiempo**, y el test de desempate de
-# `uploaded_at` depende de que el orden por id coincida con el orden de inserciÃ³n.
-# Con ids aleatorios, dos documentos del mismo instante podrÃ­an ordenarse al revÃ©s
-# entre ejecuciones y el test serÃ­a intermitente sin causa aparente.
+# `uploaded_at` depende de que el orden por id coincida con el orden de inserción.
+# Con ids aleatorios, dos documentos del mismo instante podrían ordenarse al revés
+# entre ejecuciones y el test sería intermitente sin causa aparente.
 _id_counter = count(1)
 
 
@@ -37,12 +37,12 @@ def _next_object_id() -> str:
 
 
 def is_object_id(value: str) -> bool:
-    """Â¿Tiene la forma de un ObjectId de Mongo?
+    """¿Tiene la forma de un ObjectId de Mongo?
 
-    RÃ©plica de la comprobaciÃ³n que hace el driver, sin la dependencia: 24 hex.
-    Deliberadamente *sÃ³lo* de forma, sin comprobar que el timestamp codificado sea
+    Réplica de la comprobación que hace el driver, sin la dependencia: 24 hex.
+    Deliberadamente *sólo* de forma, sin comprobar que el timestamp codificado sea
     plausible. El driver acepta cualquier hex de 24 caracteres, y un servicio que
-    fuera mÃ¡s estricto que Mongo rechazarÃ­a ids que la base de datos sÃ­ aceptarÃ­a.
+    fuera más estricto que Mongo rechazaría ids que la base de datos sí aceptaría.
     """
     if len(value) != OBJECT_ID_HEX_LENGTH:
         return False
@@ -54,11 +54,11 @@ def is_object_id(value: str) -> bool:
 
 
 class FakePdfRepository(PdfRepository):
-    """ColecciÃ³n de PDF en memoria, con la semÃ¡ntica del contrato implementada.
+    """Colección de PDF en memoria, con la semántica del contrato implementada.
 
     Guarda `StoredDocument` en un `dict` indexado por id. La unicidad de
-    `pdf_hash` se comprueba con un segundo Ã­ndice, igual que hace el Ã­ndice Ãºnico
-    de Mongo: para que este fake pueda **fallar** cuando la deduplicaciÃ³n se rompa.
+    `pdf_hash` se comprueba con un segundo índice, igual que hace el índice único
+    de Mongo: para que este fake pueda **fallar** cuando la deduplicación se rompa.
     """
 
     def __init__(self) -> None:
@@ -90,8 +90,8 @@ class FakePdfRepository(PdfRepository):
 
     async def list_paginated(self, limit: int, offset: int) -> Page[StoredDocument]:
         # Orden `uploaded_at` DESC, `_id` DESC. El desempate por id no es decorativo:
-        # sin Ã©l, dos documentos con el mismo milisegundo pueden cambiar de posiciÃ³n
-        # entre dos peticiones y un cliente que pagina los verÃ­a repetidos o
+        # sin él, dos documentos con el mismo milisegundo pueden cambiar de posición
+        # entre dos peticiones y un cliente que pagina los vería repetidos o
         # saltados (SC-05).
         ordered = sorted(
             self._documents.values(),
@@ -115,18 +115,18 @@ class FakePdfRepository(PdfRepository):
 
     @staticmethod
     def _require_valid_id(document_id: str) -> None:
-        """Valida la forma del id **antes** de tocar el almacÃ©n.
+        """Valida la forma del id **antes** de tocar el almacén.
 
-        Consultar con un id invÃ¡lido convertirÃ­a un error del cliente en un 500, y
-        el mensaje de Mongo al respecto no estÃ¡ pensado para un cliente HTTP.
+        Consultar con un id inválido convertiría un error del cliente en un 500, y
+        el mensaje de Mongo al respecto no está pensado para un cliente HTTP.
         """
         if not is_object_id(document_id):
-            raise InvalidDocumentIdException(f"'{document_id}' no es un ObjectId vÃ¡lido")
+            raise InvalidDocumentIdException(f"'{document_id}' no es un ObjectId válido")
 
     def count(self) -> int:
-        """NÃºmero de documentos guardados.
+        """Número de documentos guardados.
 
-        No forma parte del contrato: es una aserciÃ³n propia de los tests del fake,
-        para poder afirmar sobre la colecciÃ³n sin recorrerla.
+        No forma parte del contrato: es una aserción propia de los tests del fake,
+        para poder afirmar sobre la colección sin recorrerla.
         """
         return len(self._documents)
