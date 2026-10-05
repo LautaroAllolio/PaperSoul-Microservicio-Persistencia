@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     problem_type_base: str = "urn:problem:papersoul"
 
+    # Metadata de OpenAPI. Vive en la configuración y no como literal en `main.py`
+    # porque el `title` lo consume la cátedra y el orquestador al generar cliente;
+    # tener que editar `main.py` para renombrar el servicio sería un acoplamiento
+    # innecesario entre la identidad del servicio y el punto de arranque.
+    app_title: str = "PaperSoul - Microservicio de Persistencia"
+    app_version: str = "0.1.0"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
