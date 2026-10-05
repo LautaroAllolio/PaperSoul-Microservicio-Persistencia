@@ -233,8 +233,8 @@ obligaría al orquestador a capturar excepciones en el camino caliente (SPEC §1
 |---|---|---|---|---|
 | 9.1 | `create_app` + lifespan | `app/main.py` | `f002de1 feat(core): add injectable startup with DI container and health endpoint` | SC-19 🟢 |
 | 9.2 | Health | `app/api/health.py` | `f002de1 feat(core): add injectable startup with DI container and health endpoint` | test 🟢 |
-| 9.3 | Contrato de errores en API | `tests/api/test_errors_rfc9457.py` | `test(api): add RFC 9457 error contract tests` | SC-09..SC-12, SC-21, SC-22 🔵 |
-| 9.4 | Handler de 415 | `app/api/errors.py` | `feat(errors): return 415 for non-json content type` | SC-21 🟢 |
+| 9.3 | Contrato de errores en API | `app/tests/api/test_errors_rfc9457.py` | `test(api): add RFC 9457 error contract tests` | SC-09..SC-12, SC-19, SC-21, SC-22 🟢 |
+| 9.4 | Handler de 415 | `app/api/dependencies.py` + `app/api/errors.py` | `feat(api): return 415 for non-json content type and 400 for malformed json` | SC-21 🟢 |
 | 9.5 | Test de arquitectura | `app/tests/test_architecture.py` | `test(arch): enforce layer dependency rule by AST` | SC-13 🟢 |
 | 9.6 | Umbral de cobertura | `pyproject.toml` | `chore(test): enforce coverage thresholds` | SC-17 🟢 |
 | 9.7 | CI | `.github/workflows/ci.yml` | `ci: run lint, typecheck, unit and integration jobs` | SC-20 |
@@ -264,11 +264,35 @@ edición, nunca con cmdlets de PowerShell.**
 **9.3** — Matriz de contrato: cada status × `Content-Type: application/problem+json` × presencia de
 `type`/`title`/`status`/`instance`. Incluye `invalid_params` con índice de lista, campo desconocido
 (`pdfHash` → 422), `extracted_text` de 10 000 001 chars (→ 422), `pdf_hash` en mayúsculas (→ 422, D-1),
-`Content-Type: text/plain` (→ 415).
+`Content-Type: text/plain` (→ 415). 28 tests. Añadida también la comprobación de SC-19: todo 4xx/5xx del
+OpenAPI se declara `application/problem+json` con `$ref` a `ProblemDetail`.
 
 **9.4** — El 415 se valida **antes** de la validación de Pydantic: si el body llega como `text/plain`,
-FastAPI lo reporta como error de JSON y la respuesta sería 422, no 415. El handler comprueba el
-`Content-Type` de la petición y responde 415 con su propio `ProblemDetail`, sin delegar en Pydantic.
+FastAPI lo reporta como error de JSON y la respuesta sería 422, no 415.
+
+Dónde vive el 415 y por qué no en el handler: `require_json_content_type` es una **dependencia** de
+`POST /documents`, no un `if` dentro del endpoint. FastAPI lee y parsea el body *antes* de invocar la
+función del endpoint, así que un `raise` en su cuerpo llega tarde para un body que ni siquiera es JSON;
+la dependencia se resuelve antes. La comparación es por **media type** (`application/json;
+charset=utf-8` y `application/*+json` se aceptan), nunca por cabecera entera. Sin `Content-Type` solo
+se acepta si no hay body: se lee `await request.body()` y no `Content-Length`, porque `"0"` es un valor
+truthy y las peticiones `chunked` no lo declaran.
+
+**Malformed JSON (400)** se resuelve en `request_validation_error_handler`: FastAPI convierte
+`json.JSONDecodeError` en un `RequestValidationError` con `type: "json_invalid"`, así que el 400 sale de
+bifurcar por ese `type` en vez de añadir un handler nuevo. Los atributos (`type`, `title`, `status`) se
+leen de una instancia de `MalformedJsonException` para no duplicar los literales del contrato en un
+segundo sitio.
+
+**SC-19 (media type en el OpenAPI)** — FastAPI documenta el `model` de una respuesta adicional siempre
+bajo el media type de la clase de respuesta, que es `application/json`, y no hay forma de declararlo
+como `problem+json` desde el decorador. Por eso `app/api/openapi_problem.py` hace dos cosas:
+`problem_responses()` declara el modelo (que es lo que registra `ProblemDetail` en `components.schemas`)
+y `use_problem_media_types()` mueve después el media type de las respuestas cuyo `$ref` sea
+`ProblemDetail` o `HTTPValidationError`. Se identifica por `$ref` y no por una lista de endpoints, para
+que uno nuevo quede bien sin que nadie lo recuerde. El `HTTPValidationError` autogenerado por FastAPI
+para el 422 también se reescribe a `ProblemDetail`: el handler responde `type` e `invalid_params`, no la
+lista `detail` que FastAPI documenta por defecto.
 
 **9.5** — Recorre `app/services/` y `app/api/` con `ast`; falla si encuentra `import beanie|motor|pymongo`
 en `services/`, o `import ...models` en `api/`. Convierte la regla de dependencias de SPEC §6 en algo
@@ -295,17 +319,17 @@ Testcontainers — `ubuntu-latest` ya trae Docker). SC-20.
 | SC-06 | 5.1 + 5.2 🔵 |
 | SC-07 | 9.1 (con `tz_aware=True`) + 9.3 🔵 |
 | SC-08 | 8.1 + 8.2 🔵 |
-| SC-09 | 2.3 + 9.3 |
-| SC-10 | 2.1 + 9.3 |
-| SC-11 | 3.5 + 9.3 |
-| SC-12 | 3.5 + 9.3 |
+| SC-09 | 2.3 + 9.3 🟢 |
+| SC-10 | 2.1 + 9.3 🟢 |
+| SC-11 | 3.5 + 9.3 🟢 |
+| SC-12 | 3.5 + 9.3 🟢 |
 | SC-13 | 9.5 🟢 |
 | SC-14 | 0.2 🟢 |
 | SC-15 | 0.2 + 3.2 🟢 |
 | SC-16 | 9.7 (CI) 🔵 |
 | SC-17 | 2.2 + 9.6 🟢 |
 | SC-18 | 0.1 🟢 |
-| SC-19 | 9.1 🟢 |
+| SC-19 | 9.1 + 9.3 (media type del OpenAPI) 🟢 |
 | SC-20 | 9.7 |
 | SC-21 | 9.3 + 9.4 🟢 |
-| SC-22 | 3.5 + 9.3 |
+| SC-22 | 3.5 + 9.3 🟢 |
