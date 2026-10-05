@@ -235,10 +235,10 @@ obligaría al orquestador a capturar excepciones en el camino caliente (SPEC §1
 | 9.2 | Health | `app/api/health.py` | `f002de1 feat(core): add injectable startup with DI container and health endpoint` | test 🟢 |
 | 9.3 | Contrato de errores en API | `app/tests/api/test_errors_rfc9457.py` | `test(api): add RFC 9457 error contract tests` | SC-09..SC-12, SC-19, SC-21, SC-22 🟢 |
 | 9.4 | Handler de 415 | `app/api/dependencies.py` + `app/api/errors.py` | `feat(api): return 415 for non-json content type and 400 for malformed json` | SC-21 🟢 |
-| 9.5 | Test de arquitectura | `app/tests/test_architecture.py` | `test(arch): enforce layer dependency rule by AST` | SC-13 🟢 |
+| 9.5 | Test de arquitectura | `app/tests/test_architecture.py` | `test(arch): enforce layer dependency rule by AST` | SC-13 🔴 **NO HECHO** |
 | 9.6 | Umbral de cobertura | `pyproject.toml` | `chore(test): enforce coverage thresholds` | SC-17 🟢 |
-| 9.7 | CI | `.github/workflows/ci.yml` | `ci: run lint, typecheck, unit and integration jobs` | SC-20 |
-| 9.8 | README | `README.md` | `docs(readme): document setup, endpoints and runbook` | Revisión humana |
+| 9.7 | CI | `.github/workflows/ci.yml` | `ci: run lint, typecheck, unit and integration jobs` | SC-20 🔵 (sin ejecutar) |
+| 9.8 | README | `README.md` | `docs(readme): document setup, endpoints and runbook` | Revisión humana 🔵 |
 
 **9.1** — `create_app()` con `FastAPI(title, version, lifespan)`, metadata OpenAPI 3.1, `docs_url` en dev.
 El `lifespan` crea el cliente Motor con **`tz_aware=True`** (SC-07), llama `init_beanie` y **cierra el
@@ -296,14 +296,53 @@ lista `detail` que FastAPI documenta por defecto.
 
 **9.5** — Recorre `app/services/` y `app/api/` con `ast`; falla si encuentra `import beanie|motor|pymongo`
 en `services/`, o `import ...models` en `api/`. Convierte la regla de dependencias de SPEC §6 en algo
-que el CI rompe si alguien la viola. SC-13. 🟢
+que el CI rompe si alguien la viola. SC-13. 🔴 **NO HECHO — marcada 🟢 por error.**
 
-**9.7** — `astral-sh/setup-uv` + `actions/checkout`; matriz Python 3.11/3.12/3.13. Job `lint-and-unit`
-(`ruff`, `mypy`, `pytest -m "not integration"`, **sin Docker**) y job `integration` (Mongo vía
-Testcontainers — `ubuntu-latest` ya trae Docker). SC-20.
+> Esta tarea estaba marcada verde en el tracking, pero `app/tests/test_architecture.py` **no existe** en
+> el repo: no hay ningún commit que lo añada y la suite no tiene ningún test que recorra el árbol con
+> `ast`. Lo verificado es que hoy la regla se respeta *de facto* (no hay `import beanie|motor|pymongo`
+> en `services/` ni `import ...models` en `api/`), pero eso es una comprobación manual, no un test que
+> el CI pueda romper. **SC-13 sigue sin cubrir automáticamente** hasta escribir el fichero. No se ha
+> escrito aquí por no ampliar el alcance de 9.7/9.8 sin avisar.
 
-**9.8** — README: qué es, arquitectura en 3 capas, cómo levantar el entorno, tabla de endpoints, ejemplo
-`curl` de cada uno, contrato RFC 9457, y **advertencia de que no hay autenticación** (SPEC §1.1 D-3).
+**9.6** — 🟢 Hecho. `[tool.coverage.report].fail_under = 85` en `pyproject.toml`. Además se corrigió que
+`app/main.py` estaba en la lista de `omit`: `create_app()` sí lo ejercita toda la suite de API, así que
+omitirlo excluía de lameasurement justo el fichero que más conviene vigilar. Sólo queda omitido
+`app/tests/*`. Estado real medido: **93.33 %** global y **100 %** en `app/exceptions/` y
+`app/schemas/problem.py`, que es lo que SC-17 exige.
+
+**9.7** — 🔵 Escrito, **sin ejecutar**. `astral-sh/setup-uv` + `actions/checkout`; matriz Python
+3.11/3.12/3.13. Job `lint-and-unit` (`ruff check`, `ruff format --check`, `mypy app`,
+`pytest -m "not integration"` + cobertura, **sin Docker**), job `integration` (Mongo vía Testcontainers)
+y job `docker-build`. SC-20.
+
+> **El workflow no se ha ejecutado todavía**: no hay Docker en esta máquina, así que el job
+> `integration` sólo puede validarse en GitHub. No marcar SC-16/SC-20 como verdes hasta que el primer
+> run en GitHub Actions pase.
+
+Tres decisiones que no están en el enunciado y conviene que se lean antes de tocar el fichero:
+
+- **Dos jobs de cobertura, no uno.** El 85 % global va en `fail_under` de `pyproject.toml`, pero el 100 %
+  de `app/exceptions/` y `app/schemas/problem.py` se comprueba en un paso aparte del workflow:
+  `--cov-fail-under` no puede expresar «estos dos ficheros al 100 % y el resto al 85 %».
+- **`uv sync --frozen`, no `uv sync`.** Con `--frozen`, si `uv.lock` no cuadra con `pyproject.toml` el
+  comando falla en vez de re-resolver y escribir un lock nuevo en el runner. Lo que se prueba es lo que
+  está commiteado.
+- **El job `integration` no depende del de lint.** No lleva `needs:` a propósito: MongoDB no depende de
+  que el código esté formateado, y encadenarlos haría que un error de estilo retrasara la única señal
+  que importa en ese job, que es si el índice único rechaza el duplicado de verdad.
+
+**9.8** — 🔵 Hecho. README con: qué es y qué no hace el servicio, arquitectura en 3 capas con el criterio
+de por qué `schemas/` y `exceptions/` viven fuera de las capas, tabla de endpoints con sus errores,
+ejemplo `curl` de cada uno, contrato RFC 9457 con la regla 400/415/422 y por qué `invalid_params` no se
+aplana, `uv sync` + ejecución local, Docker, calidad y CI, configuración, y la **advertencia de que no
+hay autenticación** (SPEC §1.1 D-3) con los cuatro puntos a hacer antes de exponerlo.
+
+> Cada ruta, fichero, URN, comando, variable de entorno y status del README se contrastó por script contra
+> el OpenAPI, `problem_types`, `document.py`, `config.py` y el árbol real de `app/`. Los ejemplos `curl`
+> se ejecutaron contra la app con `FakePdfRepository`; los cuerpos de respuesta del README son salidas
+> reales. Pendiente de **revisión humana**: si algún texto no coincide con lo que tu profesor espera
+> mantener, es el fichero a tocar.
 
 ---
 
@@ -323,13 +362,13 @@ Testcontainers — `ubuntu-latest` ya trae Docker). SC-20.
 | SC-10 | 2.1 + 9.3 🟢 |
 | SC-11 | 3.5 + 9.3 🟢 |
 | SC-12 | 3.5 + 9.3 🟢 |
-| SC-13 | 9.5 🟢 |
+| SC-13 | 9.5 🔴 **falta el fichero** |
 | SC-14 | 0.2 🟢 |
 | SC-15 | 0.2 + 3.2 🟢 |
-| SC-16 | 9.7 (CI) 🔵 |
+| SC-16 | 9.7 (CI) 🔵 **sin ejecutar** |
 | SC-17 | 2.2 + 9.6 🟢 |
 | SC-18 | 0.1 🟢 |
 | SC-19 | 9.1 + 9.3 (media type del OpenAPI) 🟢 |
-| SC-20 | 9.7 |
+| SC-20 | 9.7 🔵 **sin ejecutar** |
 | SC-21 | 9.3 + 9.4 🟢 |
 | SC-22 | 3.5 + 9.3 🟢 |
