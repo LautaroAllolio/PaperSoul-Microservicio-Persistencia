@@ -28,7 +28,8 @@ from app.exceptions.domain import (
     ResourceNotFoundException,
 )
 from app.models.pdf_document import PdfDocument, PdfDocumentFields, StoredDocument
-from app.repositories.base import BaseRepository, Page
+from app.repositories.base import BaseRepository
+from app.schemas.pagination import Page
 
 
 @runtime_checkable

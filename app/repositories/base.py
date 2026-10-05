@@ -2,35 +2,26 @@
 
 `BaseRepository[T]` es la abstracción genérica que pide el enunciado (OT-9: es
 generalización especulativa, con un solo subtipo, y se conserva por petición
-explícita). `Page[T]` es el sobre de resultados paginados que comparten todas las
-colecciones.
+explícita).
+
+`Page[T]` **no** se define aquí sino que se importa de `app/schemas/pagination.py`, y
+es deliberado. `Page` describe una ventana de resultados, no una consulta: no menciona
+la base de datos, y por eso pertenece al vocabulario compartido. Definirla en esta
+capa obligaba a los routers a importarla desde aquí para poder tipar el retorno del
+servicio, es decir, invertía la regla de dependencias de `SPEC.md` §6 por el motivo
+más inocuo del mundo: una anotación de tipo. El módulo `pagination.py` explica el
+caso con detalle.
 """
 
-from dataclasses import dataclass, field
 from typing import Generic, TypeVar
+
+from app.schemas.pagination import Page
 
 # `T` sin `bound`: sólo aparece en posiciones de salida (`Page[T]`, `list[T]` de
 # retorno), así que un `bound` restrictivo sólo limitaría sin aportar seguridad
 # real a un contrato de lectura. Además `TypeVar` en covariancia es exactamente lo
 # que la anotación de retorno ya expresa.
 T = TypeVar("T")
-
-
-@dataclass(frozen=True, slots=True)
-class Page(Generic[T]):
-    """Una ventana de resultados más los metadatos que el cliente necesita para
-    paginar.
-
-    `total` es el número de elementos de la colección **completa**, no el de la
-    ventana. Es lo que evita que un cliente que pagina por `offset` se salte el
-    final: si `total` fuera el tamaño de la página, vería la última página y
-    concluiría que ya no hay nada.
-    """
-
-    items: list[T] = field(default_factory=list)
-    total: int = 0
-    limit: int = 0
-    offset: int = 0
 
 
 class BaseRepository(Generic[T]):

@@ -5,6 +5,24 @@ contienen reglas de negocio y no conocen ni Mongo ni Beanie. Todo lo que hacen e
 enrutado, validación de transporte, un `await` al servicio y elegir el status y el
 mapeo de la respuesta.
 
+## Lo que este módulo no importa, y por qué
+
+Aquí no hay ni un `import` de `app.repositories` ni de `app.models`, y no es
+casualidad: `SPEC.md` §6 lo prohíbe y `tests/test_architecture.py` lo verifica
+mecánicamente. Dos decisiones que lo hacen posible:
+
+- **`SHA256_HEX` se importa de `app.schemas.document`**, no de
+  `app/models/pdf_document.py` donde se declara. El `pattern` del path param es
+  parte del contrato público, así que se lee de donde vive el contrato público. El
+  módulo `schemas/document.py` explica por qué lo reexporta.
+- **El retorno del listado no se anota.** Antes era
+  `page: Page[StoredDocument] = await service.list_documents(...)`, y esa anotación
+  obligaba a importar `Page` desde la capa de datos y `StoredDocument` desde la capa
+  de persistencia para nombrar un tipo que el servicio ya declara en su firma. mypy
+  infiere el tipo exactamente igual y la capa de presentación deja de depender de la
+  capa de datos. La lección general: **una anotación puede ser el único motivo de una
+  dependencia arquitectónica**, y por eso hay un test que la vigila.
+
 Las respuestas de error **no** se declaran aquí con `@app.exception_handler`: las
 traduce un único punto, `api/errors.py`, que lee el status de la excepción de
 dominio. Por eso estos handlers no contienen ni un `if` sobre el tipo de error.
@@ -16,9 +34,8 @@ from fastapi import APIRouter, Depends, Path, Query, Response, status
 
 from app.api.dependencies import get_document_service, require_json_content_type
 from app.api.openapi_problem import problem_responses
-from app.models.pdf_document import SHA256_HEX, StoredDocument
-from app.repositories.base import Page
 from app.schemas.document import (
+    SHA256_HEX,
     DocumentCreateRequest,
     DocumentListResponse,
     DocumentPersistedResponse,
@@ -134,7 +151,7 @@ async def list_documents(
     el endpoint en una extracción de la colección entera, y el `total` en la única
     promesa de coste acotado.
     """
-    page: Page[StoredDocument] = await service.list_documents(limit=limit, offset=offset)
+    page = await service.list_documents(limit=limit, offset=offset)
 
     return to_list_response(page)
 

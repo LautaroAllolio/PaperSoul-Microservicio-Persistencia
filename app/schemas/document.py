@@ -8,6 +8,19 @@ Cada DTO declara `extra="forbid"` de forma explícita, porque en el OpenAPI el
 contrato pactado con `Extraer` es `additionalProperties: false`. Un `pdfHash`
 mal escrito debe recibir un 422 que lo diga, no guardarse como un campo
 desconocido que nadie leerá.
+
+## `SHA256_HEX` se importa aquí a propósito
+
+Las constantes de contrato (`SHA256_HEX`, `MAX_EXTRACTED_TEXT_CHARS`,
+`MAX_FILENAME_CHARS`) se declaran en `app/models/pdf_document.py`, que es donde vive
+la regla de dominio que las produce, y se importan hacia aquí. `SHA256_HEX` además
+se **reexporta** desde este módulo, porque el router lo necesita para declarar el
+`pattern` del path param de `by-hash` y no puede ir a `models/` a buscarlo:
+`SPEC.md` §6 prohíbe de forma explícita `api -> models`.
+
+El path param y el campo del body deben compartir la misma expresión regular. Si cada
+uno declarara la suya, un hash que pasara por el body podría ser rechazado en el path
+o al revés, y el fallo aparecería sólo para un subconjunto de hashes.
 """
 
 from datetime import datetime

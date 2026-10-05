@@ -7,16 +7,24 @@ atado a un detalle interno que no es parte del contrato público.
 Y por la misma razón el mapeo no se mete en `Page` como un método: `Page` es un
 sobre genérico, y enseñarle a convertir documentos PDF lo convertiría en un
 concepto de este dominio.
+
+## La excepción: `models` sí se importa aquí
+
+Este módulo es el puente entre las dos fronteras, y por eso es el único punto de `app/`
+donde el DTO de transporte y el documento de persistencia se tocan. Es una
+dependencia *explícita y localizada*, no una regla: si aparece en otro módulo,
+`tests/test_architecture.py` lo señala. La alternativa —duplicar los tipos de un lado
+— es peor que la excepción.
 """
 
 from app.models.pdf_document import PdfDocumentFields, StoredDocument
-from app.repositories.base import Page
 from app.schemas.document import (
     DocumentCreateRequest,
     DocumentListResponse,
     DocumentPersistedResponse,
     DocumentResponse,
 )
+from app.schemas.pagination import Page
 
 
 def to_response(document: StoredDocument) -> DocumentResponse:

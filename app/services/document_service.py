@@ -9,10 +9,10 @@ un fake sin montar la aplicación.
 """
 
 from app.models.pdf_document import StoredDocument
-from app.repositories.base import Page
 from app.repositories.pdf_repository import PdfRepository
 from app.schemas.document import DocumentCreateRequest, HashExistsResponse
 from app.schemas.mappers import to_fields
+from app.schemas.pagination import Page
 
 
 class DocumentService:
