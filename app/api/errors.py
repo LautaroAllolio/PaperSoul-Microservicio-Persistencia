@@ -92,7 +92,7 @@ async def request_validation_error_handler(request: Request, exc: Exception) -> 
         # `type` y el `title`. Duplicarlos seria una segunda fuente de verdad que
         # divergiria en silencio en cuanto el contrato cambiara, y el fallo apareceria
         # como un `type` desconocido en un cliente, no como un test rojo.
-        malformed = MalformedJsonException("El cuerpo de la peticion no es JSON valido.")
+        malformed = MalformedJsonException("El cuerpo de la petición no es JSON válido.")
         return problem_response(
             ProblemDetail(
                 type=malformed.problem_type,
