@@ -235,7 +235,7 @@ obligaría al orquestador a capturar excepciones en el camino caliente (SPEC §1
 | 9.2 | Health | `app/api/health.py` | `f002de1 feat(core): add injectable startup with DI container and health endpoint` | test 🟢 |
 | 9.3 | Contrato de errores en API | `app/tests/api/test_errors_rfc9457.py` | `test(api): add RFC 9457 error contract tests` | SC-09..SC-12, SC-19, SC-21, SC-22 🟢 |
 | 9.4 | Handler de 415 | `app/api/dependencies.py` + `app/api/errors.py` | `feat(api): return 415 for non-json content type and 400 for malformed json` | SC-21 🟢 |
-| 9.5 | Test de arquitectura | `app/tests/test_architecture.py` | `test(arch): enforce layer dependency rule by AST` | SC-13 🔴 **NO HECHO** |
+| 9.5 | Test de arquitectura | `app/tests/test_architecture.py` | `test(arch): enforce layer dependency rule by AST` | SC-13 🟢 |
 | 9.6 | Umbral de cobertura | `pyproject.toml` | `chore(test): enforce coverage thresholds` | SC-17 🟢 |
 | 9.7 | CI | `.github/workflows/ci.yml` | `ci: run lint, typecheck, unit and integration jobs` | SC-20 🔵 (sin ejecutar) |
 | 9.8 | README | `README.md` | `docs(readme): document setup, endpoints and runbook` | Revisión humana 🔵 |
@@ -294,21 +294,53 @@ que uno nuevo quede bien sin que nadie lo recuerde. El `HTTPValidationError` aut
 para el 422 también se reescribe a `ProblemDetail`: el handler responde `type` e `invalid_params`, no la
 lista `detail` que FastAPI documenta por defecto.
 
-**9.5** — Recorre `app/services/` y `app/api/` con `ast`; falla si encuentra `import beanie|motor|pymongo`
-en `services/`, o `import ...models` en `api/`. Convierte la regla de dependencias de SPEC §6 en algo
-que el CI rompe si alguien la viola. SC-13. 🔴 **NO HECHO — marcada 🟢 por error.**
+**9.5** — Recorre `app/` con `ast`; falla si un módulo importa algo que la arquitectura prohíbe.
+SC-13. 🟢 Hecho en `e65e3c3`, con el refactor previo en `5387244`.
 
-> Esta tarea estaba marcada verde en el tracking, pero `app/tests/test_architecture.py` **no existe** en
-> el repo: no hay ningún commit que lo añada y la suite no tiene ningún test que recorra el árbol con
-> `ast`. Lo verificado es que hoy la regla se respeta *de facto* (no hay `import beanie|motor|pymongo`
-> en `services/` ni `import ...models` en `api/`), pero eso es una comprobación manual, no un test que
-> el CI pueda romper. **SC-13 sigue sin cubrir automáticamente** hasta escribir el fichero. No se ha
-> escrito aquí por no ampliar el alcance de 9.7/9.8 sin avisar.
+Las reglas verificadas, todas ellas traducción de flechas del grafo de `SPEC.md` §6:
+
+| Paquete | Importaciones prohibidas |
+|---|---|
+| `api/` | `app.repositories`, `app.models`, `beanie`, `motor`, `pymongo`, `bson` |
+| `services/` | `beanie`, `motor`, `pymongo`, `bson` |
+| `schemas/` | `app.services`, `app.api` |
+| `repositories/` | `app.api`, `app.services` |
+| `exceptions/` | `fastapi`, `app.api`, `app.services`, `app.repositories`, `app.schemas` |
+| `core/` | `app.api` |
+
+Además de las reglas por paquete: aciclicidad del grafo de imports interno, alcanzabilidad de
+todo módulo de producción desde `app.main`, y un guard que falla si `RULES` se vacía (un
+conjunto de reglas vacío aprobaría todos los tests sin comprobar nada).
+
+**Al escribirlo falló, y eso es lo que hacía falta.** El test detectó **dos violaciones
+reales** del SPEC que el código llevaba arrastrando desde el lote S8:
+
+1. `app/api/v1/documents.py` importaba `app.repositories.base` **sólo para nombrar un tipo**
+   en una anotación: `page: Page[StoredDocument] = await service.list_documents(...)`.
+   Esa anotación era el único motivo de una dependencia `api → repositories` que el
+   diagrama de §6 prohíbe explícitamente.
+2. El mismo import traía `app.models.pdf_document`, o sea `api → models`, también
+   prohibido de forma explícita.
+
+El arreglo fue en `5387244`, **antes** que el test, y se hizo lo que el propio SPEC §4 ya
+preveía: mover `Page` a `app/schemas/pagination.py` (línea 201 del árbol del SPEC, fichero
+que nunca se creó) y reexportar `SHA256_HEX` desde `app/schemas/document.py` para que el
+router lo lea del contrato público. La anotación del listado se eliminó: mypy infiere el
+tipo idéntico.
+
+> **Lección que queda registrada:** una anotación de tipo puede ser el único motivo de una
+> dependencia arquitectónica. El diagrama de §6 parecía correcto al leerlo y no lo era. Por eso
+> la regla se verifica mecánicamente y no por convención.
+
+El test se comprobó a sí mismo antes de darse por bueno: se inyectaron 12 violaciones de
+todos los tipos (una por regla, más `services → motor`, `services → pymongo`,
+`services → bson`) y las detectó las 12, sin un solo falso positivo sobre el código real. Un
+test de arquitectura que no falla cuando algo está mal no es un test.
 
 **9.6** — 🟢 Hecho. `[tool.coverage.report].fail_under = 85` en `pyproject.toml`. Además se corrigió que
 `app/main.py` estaba en la lista de `omit`: `create_app()` sí lo ejercita toda la suite de API, así que
-omitirlo excluía de lameasurement justo el fichero que más conviene vigilar. Sólo queda omitido
-`app/tests/*`. Estado real medido: **93.33 %** global y **100 %** en `app/exceptions/` y
+omitirlo excluía de la medición el fichero que más conviene vigilar. Sólo queda omitido
+`app/tests/*`. Estado real medido: **93.36 %** global y **100 %** en `app/exceptions/` y
 `app/schemas/problem.py`, que es lo que SC-17 exige.
 
 **9.7** — 🔵 Escrito, **sin ejecutar**. `astral-sh/setup-uv` + `actions/checkout`; matriz Python
@@ -332,17 +364,28 @@ Tres decisiones que no están en el enunciado y conviene que se lean antes de to
   que el código esté formateado, y encadenarlos haría que un error de estilo retrasara la única señal
   que importa en ese job, que es si el índice único rechaza el duplicado de verdad.
 
-**9.8** — 🔵 Hecho. README con: qué es y qué no hace el servicio, arquitectura en 3 capas con el criterio
-de por qué `schemas/` y `exceptions/` viven fuera de las capas, tabla de endpoints con sus errores,
-ejemplo `curl` de cada uno, contrato RFC 9457 con la regla 400/415/422 y por qué `invalid_params` no se
-aplana, `uv sync` + ejecución local, Docker, calidad y CI, configuración, y la **advertencia de que no
-hay autenticación** (SPEC §1.1 D-3) con los cuatro puntos a hacer antes de exponerlo.
+**9.8** — 🔵 Hecho. README reescrito como registro formal, técnico y académico: 10 secciones,
+numeración decimal en las subsecciones, terminología técnica en español (*petición*,
+*carga útil*, *entorno de ejecución*, *conocimiento prohibido*) y eliminación del registro
+coloquial del primer borrador. Contenido: alcance del servicio, arquitectura en tres capas
+con su grafo de dependencias, inyección de dependencias, contrato completo de la API con
+los cinco recursos, modelo de errores RFC 9457 con sus criterios de clasificación,
+procedimiento de ejecución local y en contenedor, calidad e integración continua,
+configuración, verificación mecánica de la arquitectura y advertencias de seguridad
+(SPEC §1.1 D-3).
 
-> Cada ruta, fichero, URN, comando, variable de entorno y status del README se contrastó por script contra
-> el OpenAPI, `problem_types`, `document.py`, `config.py` y el árbol real de `app/`. Los ejemplos `curl`
-> se ejecutaron contra la app con `FakePdfRepository`; los cuerpos de respuesta del README son salidas
-> reales. Pendiente de **revisión humana**: si algún texto no coincide con lo que tu profesor espera
-> mantener, es el fichero a tocar.
+> **Verificación objetiva, no una relectura.** Un script contrastó cada afirmación del
+> README contra el código: las cuatro rutas contra el OpenAPI, los códigos de estado de los
+> cinco recursos contra los declarados, los siete URN de `type` contra `problem_types.py`,
+> los límites del contrato contra `schemas/document.py`, los valores por defecto de las
+> variables contra `core/config.py`, los seis comandos contra su ejecución real, las doce
+> prohibiciones de la tabla de arquitectura contra `RULES` del propio test, y la existencia
+> de cada fichero citado. También se comprobó que no quedan anclas internas rotas ni
+> artefactos de texto (caracteres no latinos, palabras inglesas incrustadas, coloquialismos,
+> tuteo).
+>
+> Pendiente de **revisión humana**: si el tono no es el que espera la cátedra, es lo único
+> que habría que ajustar.
 
 ---
 
@@ -362,7 +405,7 @@ hay autenticación** (SPEC §1.1 D-3) con los cuatro puntos a hacer antes de exp
 | SC-10 | 2.1 + 9.3 🟢 |
 | SC-11 | 3.5 + 9.3 🟢 |
 | SC-12 | 3.5 + 9.3 🟢 |
-| SC-13 | 9.5 🔴 **falta el fichero** |
+| SC-13 | 9.5 🟢 |
 | SC-14 | 0.2 🟢 |
 | SC-15 | 0.2 + 3.2 🟢 |
 | SC-16 | 9.7 (CI) 🔵 **sin ejecutar** |
