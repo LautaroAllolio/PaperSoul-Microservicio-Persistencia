@@ -20,6 +20,7 @@ from fastapi import FastAPI
 
 from app.api.errors import register_exception_handlers
 from app.api.health import router as health_router
+from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.container import Container, build_container
 from app.core.database import (
@@ -49,9 +50,13 @@ def create_app(
     dos se usa la implementación real, que es el caso de producción.
 
     `client_factory` e `init_beanie_func` son puntos de inyección para poder
-    levantar la aplicación entera en un test sin Mongo. Los routers de `/api/v1` se
-    montan en S4; aquí sólo va la sonda de salud, que es lo único que un proceso
-    necesita exponer para que se le pueda preguntar si está vivo.
+    levantar la aplicación entera en un test sin Mongo.
+
+    El `Container` se publica en `app.state` **aquí** y no en el lifespan, y la
+    distinción es deliberada: el contenedor es el grafo de dependencias, que no
+    necesita conexión, y el lifespan sólo gestiona el recurso (el cliente de Mongo).
+    Publicarlo en el lifespan ataría los routers a que el arranque se ejecutara, y
+    `ASGITransport` no lo dispara: los tests de API no podrían ni arrancar.
     """
     settings = get_settings()
     configure_logging(settings.log_level)
@@ -86,7 +91,6 @@ def create_app(
                 database_name=settings.mongodb_database,
                 init_beanie_func=init_beanie_func,
             )
-            app.state.container = container
             app.state.mongo_client = client
             app.state.mongo_database = database
             yield
@@ -100,7 +104,11 @@ def create_app(
         version=settings.app_version,
         lifespan=lifespan,
     )
+    # Antes del lifespan a propósito: los routers resuelven el servicio por `Depends`
+    # al atender la primera petición, y para entonces el contenedor ya está aquí.
+    app.state.container = container
     app.include_router(health_router)
+    app.include_router(api_router, prefix=API_V1_PREFIX)
     register_exception_handlers(app)
     return app
 
