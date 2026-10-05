@@ -139,8 +139,22 @@ Base de datos con nombre único por test: `papersoul_test_{uuid4().hex[:8]}`.
 **3.4** — `BeaniePdfRepository`. Traduce `DuplicateKeyError` → `DuplicateResourceException` **en la capa
 de datos** (es quien sabe que el índice es único). `list_paginated` con `sort([("uploaded_at",-1),("_id",-1)])`
 + `skip`/`limit`, devuelve `(items, total)`.
-**Criterio — GATE G1:** `PdfDocument.get_motor_collection().index_information()` reporta `pdf_hash` con
-`unique: true` contra Mongo real (SC-03). 🔵
+**Criterio — GATE G1:** `PdfDocument.get_motor_collection().index_information()` reporta el índice
+`uniq_pdf_hash` con `unique: true` contra Mongo real (SC-03). 🔵
+
+> **Estado de G1: tests escritos, SIN EJECUTAR.** `6f04d72` añade 16 tests en
+> `app/tests/integration/` más las fixtures de `conftest.py`. No se han podido correr porque esta máquina
+> no tiene Docker Desktop; sólo se ha comprobado que **colectan** (`pytest --collect-only`) y que
+> `pytest -m "not integration"` sigue verde. El gate **no está cerrado**: se cierra en CI (SC-20) o en
+> una máquina con Docker. No marcar G1 como verde sin ejecutarlo.
+>
+> Los índices se consultan por su **nombre explícito** (`uniq_pdf_hash`, `idx_uploaded_at_id_desc`), no
+> por los nombres que Mongo genera (`pdf_hash_1`). Es intencionado: consultar el nombre declarado
+> detecta que Beanie no lo creó, que es el fallo que G1 existe para encontrar.
+>
+> Lo primero que puede fallar al ejecutarlos: `init_beanie` se llama una vez por test (base de datos
+> distinta cada vez) y **es estado global**. Si Beanie 1.30 se quejara de re-inicializar, la solución es
+> un `init_beanie` por sesión más un `swap_database` por test, no relajar el aislamiento.
 
 **3.5** — `DocumentCreateRequest` con `pattern: ^[0-9a-f]{64}$` en `pdf_hash` y `text_hash` (SPEC D-1, sin
 flag `i`), `additionalProperties: false`, `maxLength: 10000000` en `extracted_text`.
