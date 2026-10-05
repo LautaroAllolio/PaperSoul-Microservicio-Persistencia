@@ -124,6 +124,27 @@ class PdfDocumentFields(BaseModel):
         return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
+class StoredDocument(PdfDocumentFields):
+    """Un documento tal y como sale de la base de datos: las reglas de dominio más
+    su identificador.
+
+    Es lo que devuelven los repositorios, y existe por la misma razón que
+    `PdfDocumentFields`: `PdfDocument` no se puede construir sin una conexión, así
+    que un contrato de repositorio que devolviera `PdfDocument` obligaría a tener
+    Mongo para usar un fake.
+
+    Hereda las validaciones, de modo que un documento que sale de la base de datos
+    cumple las mismas reglas que uno recién creado. Si alguna vez no las cumpliera,
+    sería señal de que algo escribió en la colección saltándose el servicio.
+    """
+
+    # Formato de un ObjectId de Mongo. El formato **no** se valida aquí a
+    # propósito: el repositorio es quien garantiza que el id viene de la base de
+    # datos, y validar el formato en el modelo que lo produce sería redundante. El
+    # servicio sí lo valida, porque ahí el id llega del cliente y puede venir mal.
+    id: str
+
+
 class PdfDocument(PdfDocumentFields, Document):
     """El documento de Beanie: las reglas de arriba más el almacenamiento.
 
