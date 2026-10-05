@@ -8,7 +8,6 @@ prueban directamente en vez de confiar en que algún endpoint las ejercite.
 from datetime import UTC, datetime
 
 from app.models.pdf_document import PdfDocumentFields, StoredDocument
-from app.repositories.base import Page
 from app.schemas.document import DocumentCreateRequest
 from app.schemas.mappers import (
     to_fields,
@@ -16,6 +15,7 @@ from app.schemas.mappers import (
     to_persisted_response,
     to_response,
 )
+from app.schemas.pagination import Page
 
 PDF_HASH = "a" * 64
 TEXT_HASH = "b" * 64

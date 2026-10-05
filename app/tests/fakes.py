@@ -18,8 +18,8 @@ from app.exceptions.domain import (
     ResourceNotFoundException,
 )
 from app.models.pdf_document import PdfDocumentFields, StoredDocument
-from app.repositories.base import Page
 from app.repositories.pdf_repository import PdfRepository
+from app.schemas.pagination import Page
 
 OBJECT_ID_HEX_LENGTH = 24
 
