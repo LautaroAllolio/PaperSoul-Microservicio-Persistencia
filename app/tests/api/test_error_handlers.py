@@ -71,17 +71,17 @@ async def request(app: FastAPI, method: str, url: str, **kwargs: Any) -> httpx.R
         (
             "/documents/missing",
             404,
-            "urn:problem:papersoul:document_not_found",
+            "urn:problem:papersoul:document-not-found",
         ),
         (
             "/documents/duplicated",
             409,
-            "urn:problem:papersoul:document_hash_conflict",
+            "urn:problem:papersoul:document-hash-conflict",
         ),
         (
             "/documents/malformed-id",
             400,
-            "urn:problem:papersoul:invalid_document_id",
+            "urn:problem:papersoul:invalid-document-id",
         ),
     ],
 )
@@ -155,7 +155,7 @@ async def test_unhandled_exception_becomes_500_without_leaking_internals() -> No
 
     assert response.status_code == 500
     body = response.json()
-    assert body["type"] == "urn:problem:papersoul:internal_error"
+    assert body["type"] == "urn:problem:papersoul:internal-error"
     assert "fallo no controlado" not in response.text
 
 
@@ -187,7 +187,7 @@ async def test_validation_failure_is_422_with_the_failing_field() -> None:
     )
 
     assert response.status_code == 422
-    assert response.json()["type"] == "urn:problem:papersoul:request_validation_failed"
+    assert response.json()["type"] == "urn:problem:papersoul:request-validation-failed"
     assert response.json()["invalid_params"][0]["loc"] == ["body", "filename"]
 
 

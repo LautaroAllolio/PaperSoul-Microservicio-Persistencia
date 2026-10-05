@@ -116,7 +116,7 @@ def test_serializes_to_a_json_object() -> None:
 
     payload = detail.model_dump(exclude_none=True, mode="json")
 
-    assert payload["type"] == "urn:problem:papersoul:request_validation_failed"
+    assert payload["type"] == "urn:problem:papersoul:request-validation-failed"
     assert payload["status"] == 422
     assert payload["instance"] == "/api/v1/documents"
     assert payload["invalid_params"][0]["loc"] == ["body", "page_count"]
