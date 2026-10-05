@@ -62,6 +62,13 @@ ignore = [
     "E501",    # el formatter ya gestiona el largo de línea
     "B008",    # Depends()/Query() en defaults es idiomático en FastAPI
     "RUF012",  # ClassVar explícito es ruido en dataclasses de config
+    # N818 pide suffijo `Error` en el nombre de las excepciones. Los nombres
+    # `ResourceNotFoundException` / `DuplicateResourceException` /
+    # `InvalidDocumentIdException` son contrato del enunciado del microservicio:
+    # renombrarlos rompería la nomenclatura que la cátedra fija. La convención
+    # contraria (`...Error`) sigue disponible para errores nuevos si el equipo
+    # decide alinearse con ruff en el futuro.
+    "N818",
 ]
 
 [tool.ruff.lint.per-file-ignores]
