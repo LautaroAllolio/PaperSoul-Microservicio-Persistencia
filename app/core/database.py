@@ -20,7 +20,6 @@ from typing import Any
 from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
-from app.core.config import get_settings
 from app.models.pdf_document import PdfDocument
 
 logger = logging.getLogger(__name__)
@@ -76,13 +75,3 @@ async def close_database(client: AsyncIOMotorClient) -> None:
     """
     client.close()
     logger.info("Cliente de MongoDB cerrado")
-
-
-def settings_from_environment() -> tuple[str, str]:
-    """Lee la URI y el nombre de la base de datos de la configuración.
-
-    Existe para que el llamador no tenga que importar `get_settings`, y así la
-    lectura de configuración queda en un único sitio testeable.
-    """
-    settings = get_settings()
-    return settings.mongodb_uri, settings.mongodb_database
