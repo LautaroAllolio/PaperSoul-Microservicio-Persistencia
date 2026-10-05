@@ -116,12 +116,16 @@ markers = [
 [tool.coverage.run]
 source = ["app"]
 branch = true
-omit = [
-    "app/tests/*",
-    "app/main.py",
-]
+# SC-17 mide la cobertura de `app/`, y `app/main.py` forma parte de `app/`. Excluirlo
+# haria que el porcentaje del gate describiera un conjunto de ficheros distinto del que
+# la SPEC exige. La suite de API monta la app entera con `create_app`, asi que el
+# composition root esta cubierto de verdad: medido da 98%.
+omit = ["app/tests/*"]
 
 [tool.coverage.report]
+# SC-17: 85% en app/. Sin este numero, `pytest --cov` imprime el informe y sale con
+# codigo 0 aunque la cobertura se hunda: el gate noeria nada.
+fail_under = 85
 show_missing = true
 skip_covered = false
 exclude_lines = [
