@@ -217,8 +217,8 @@ obligaría al orquestador a capturar excepciones en el camino caliente (SPEC §1
 
 | # | Tarea | Archivos | Commit | Verificación |
 |---|---|---|---|---|
-| 9.1 | `create_app` + lifespan | `app/main.py` | `feat(core): add app factory with lifespan and OpenAPI metadata` | SC-19 🟢 |
-| 9.2 | Health | `app/api/health.py` | `feat(api): add health endpoint` | test 🟢 |
+| 9.1 | `create_app` + lifespan | `app/main.py` | `f002de1 feat(core): add injectable startup with DI container and health endpoint` | SC-19 🟢 |
+| 9.2 | Health | `app/api/health.py` | `f002de1 feat(core): add injectable startup with DI container and health endpoint` | test 🟢 |
 | 9.3 | Contrato de errores en API | `tests/api/test_errors_rfc9457.py` | `test(api): add RFC 9457 error contract tests` | SC-09..SC-12, SC-21, SC-22 🔵 |
 | 9.4 | Handler de 415 | `app/api/errors.py` | `feat(errors): return 415 for non-json content type` | SC-21 🟢 |
 | 9.5 | Test de arquitectura | `app/tests/test_architecture.py` | `test(arch): enforce layer dependency rule by AST` | SC-13 🟢 |
@@ -228,7 +228,24 @@ obligaría al orquestador a capturar excepciones en el camino caliente (SPEC §1
 
 **9.1** — `create_app()` con `FastAPI(title, version, lifespan)`, metadata OpenAPI 3.1, `docs_url` en dev.
 El `lifespan` crea el cliente Motor con **`tz_aware=True`** (SC-07), llama `init_beanie` y **cierra el
-cliente con `await`** al salir.
+cliente con `await`** al salir. 🟢 Hecho en `f002de1` (adelantado a S3 para poder testear S4 sin Docker).
+
+Decisiones que se tomaron al implementarlo, y que el enunciado no fijaba:
+
+- `create_app` recibe `repository`, `client_factory` e `init_beanie_func`, todos con default de
+  producción. La app se puede construir entera con fakes, que es la condición de **9.3** y de todo S4.
+- El cliente se pide **fuera** del `try` del lifespan. Si se creara dentro y su construcción fallara,
+  el `finally` vería `None` y no podría cerrar nada. Cubierto por
+  `test_lifespan_closes_the_database_even_when_startup_fails`.
+- `init_database` ya **no** crea el cliente: sólo inicializa Beanie sobre uno existente. Separar
+  "conectar" de "preparar el ODM" es lo que permite que el test del fallo sea posible.
+- El `Container` se publica en `app.state` para que `Depends` lo resuelva en S4.
+
+**Codificación (nota de proceso).** Los ficheros de 3.4 y 3.5 se escribieron con
+`Set-Content -Encoding UTF8` en PowerShell 5.1, que interpreta UTF-8 como Windows-1252 y produce
+texto doblemente codificado. No rompía los tests (el código ejecutable es ASCII) pero hacía fallar
+`RUF002`. Reparado en `4fcb65e`. **Regla: editar ficheros de texto con las herramientas de
+edición, nunca con cmdlets de PowerShell.**
 
 **9.3** — Matriz de contrato: cada status × `Content-Type: application/problem+json` × presencia de
 `type`/`title`/`status`/`instance`. Incluye `invalid_params` con índice de lista, campo desconocido
