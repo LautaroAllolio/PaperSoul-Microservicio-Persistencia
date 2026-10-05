@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancelar el run anterior del mismo ref: en un push seguidos sobre `main` el CI
+# tarda lo que tarda `uv sync` mas los tests, y solo el ultimo commit importa.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-unit:
+    name: Lint + unit (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # SC-20. La matriz sube y baja sola cuando `requires-python` cambia, asi
+        # que no hay una lista que pueda quedarse obsoleta en silencio.
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Instalar Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      # `--frozen` y no `uv sync` a secas: si el lock no cuadra con pyproject, el
+      # comando falla en vez de re-resolver y escribir un lock nuevo. SC-18 pide
+      # justamente que el lock commiteado sea el que se instala, no uno derivado en
+      # cada runner.
+      - name: Sincronizar dependencias desde uv.lock
+        run: uv sync --frozen
+
+      # Lint y typecheck en un solo job y en un solo paso: son el mismo gate de
+      # "el codigo esta bien formado" y no dependen de la version de Python. Corren
+      # una vez por matriz, y el coste de repetirlo tres veces no compra nada.
+      - name: Lint y typecheck
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy app
+
+      # Sin `-m integration`: este job es el que tiene que correr en maquinas sin
+      # Docker (SC-15), y el job `integration` es quien arranca Mongo de verdad.
+      - name: Tests unitarios y de API (sin Docker)
+        run: uv run pytest -m "not integration" --cov=app --cov-report=term-missing
+
+      # SC-17 exige ademas 100% en `app/exceptions/` y `app/schemas/problem.py`.
+      # `--cov-fail-under` no puede expresar "estos dos ficheros al 100% y el resto
+      # al 85%", asi que es un segundo gate sobre el mismo .coverage.
+      - name: Cobertura 100% en exceptions/ y problem.py (SC-17)
+        run: uv run coverage report --include="app/exceptions/*,app/schemas/problem.py" --fail-under=100
+
+      - name: Subir informe de cobertura
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: .coverage
+          retention-days: 7
+
+  integration:
+    name: Integración contra Mongo real (G1)
+    runs-on: ubuntu-latest
+    # SC-15 y SC-16. No lleva `needs`: Mongo no depende de que el lint pase, y
+    # encadenarlos haria que un error de estilo retrasara la única señal que de
+    # verdad importa aqui, que es si el indice unico de Mongo rechaza el duplicado.
+    steps:
+      - uses: actions/checkout@v4
+
+      # Docker viene incluido en los runners de GitHub, a diferencia de la
+      # maquina de desarrollo. Es la razon de que G1 se pueda verificar aqui y no
+      # haya hecho falta Docker en local.
+      - name: Verificar disponibilidad de Docker
+        run: docker version
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Sincronizar dependencias desde uv.lock
+        run: uv sync --frozen
+
+      # `-m integration` en vez de `-m "not integration"`: explicito en las dos
+      # direcciones para que quede claro que este job es el que habla con Mongo.
+      # Testcontainers levanta `mongo:7` por su cuenta, asi que no hay ningun
+      # `service:` ni `docker compose up` en este workflow.
+      - name: G1 con MongoDB vía Testcontainers
+        run: uv run pytest -m integration -v
+
+      # Testcontainers publica el contenedor en un puerto efimero y lo tira al
+      # terminar. Publicar `mongo-data` desde el compose habria dejado un volumen
+      # a medias si el job se cancela, y esos datos no sirven para nada.
+      - name: Logs de Mongo si el job falla
+        if: failure()
+        run: docker ps -a
+
+  docker-build:
+    name: Construcción de la imagen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Comprueba que el Dockerfile y el .dockerignore siguen siendo coherentes con
+      # lo que hay en el repo. `docker buildx build --load` construye de verdad en
+      # lugar de solo parsear, que es lo que hace `--check`.
+      - name: Construir la imagen del servicio
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: papersoul-persistencia:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
