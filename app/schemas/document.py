@@ -108,6 +108,27 @@ class HashExistsResponse(BaseModel):
     uploaded_at: datetime | None = None
 
 
+class ChecksumMatchResponse(BaseModel):
+    """Respuesta de `GET /by-checksum/{pdf_hash}`: el contrato del Orquestador.
+
+    A diferencia de `by-hash` (siempre `200` con `exists`), este endpoint responde
+    **404 con un problem JSON** si el hash no está: el Orquestador consume el 404
+    como señal de control de flujo del dedup ("no lo tengo, extraer"), no como un
+    error, y su cliente `FindByChecksum` lo mapea a `ErrDocumentNotFound`.
+
+    Trae sólo los campos que el Orquestador necesita para su respuesta `REUSED`
+    (`id`, `filename`, `page_count`), y **no** `extracted_text`: devolverlo
+    duplicaría el tráfico de un PDF de hasta 10 MB que el cliente acaba de enviar.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    pdf_hash: str
+    filename: str
+    page_count: int
+
+
 class DocumentListResponse(BaseModel):
     """Respuesta del listado paginado."""
 

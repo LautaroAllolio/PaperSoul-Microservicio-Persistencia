@@ -19,6 +19,7 @@ dependencia *explícita y localizada*, no una regla: si aparece en otro módulo,
 
 from app.models.pdf_document import PdfDocumentFields, StoredDocument
 from app.schemas.document import (
+    ChecksumMatchResponse,
     DocumentCreateRequest,
     DocumentListResponse,
     DocumentPersistedResponse,
@@ -44,6 +45,21 @@ def to_persisted_response(document: StoredDocument) -> DocumentPersistedResponse
         id=document.id,
         pdf_hash=document.pdf_hash,
         uploaded_at=document.uploaded_at,
+    )
+
+
+def to_checksum_match_response(document: StoredDocument) -> ChecksumMatchResponse:
+    """Modelo de persistencia → documento del `by-checksum` del Orquestador.
+
+    Proyecta los campos que el Orquestador necesita para su respuesta `REUSED`
+    (véase `ChecksumMatchResponse`); si devolviera el `extracted_text` entero,
+    duplicaría el tráfico que el cliente acaba de generar.
+    """
+    return ChecksumMatchResponse(
+        id=document.id,
+        pdf_hash=document.pdf_hash,
+        filename=document.filename,
+        page_count=document.page_count,
     )
 
 

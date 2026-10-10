@@ -113,6 +113,55 @@ async def test_by_hash_answers_200_with_exists_true_when_present(
     assert body["uploaded_at"] is not None
 
 
+# --------------------------------- GET /documents/by-checksum/{pdf_hash}
+
+
+async def test_by_checksum_answers_404_with_a_problem_when_absent(
+    client: httpx.AsyncClient,
+) -> None:
+    """Contrato del Orquestador: hash desconocido es **404 con problem JSON**.
+
+    Es el reverso deliberado de `by-hash` (siempre 200): el orquestador consume el
+    404 como control de flujo del dedup ("no lo tengo, extraer") sin distinguir
+    "200 vs 404", así que aquí el 404 está pactado y debe ser machine-legible.
+    """
+    response = await client.get(f"{DOCUMENTS_URL}/by-checksum/{sha256_hex()}")
+
+    assert response.status_code == 404
+    assert response.json()["type"] == "urn:problem:papersoul:document-not-found"
+
+
+async def test_by_checksum_answers_200_with_the_lean_document_when_present(
+    client: httpx.AsyncClient,
+) -> None:
+    """El 200 trae lo que el orquestador necesita para su respuesta `REUSED`
+    (`id`, `pdf_hash`, `filename`, `page_count`) y **no** `extracted_text`: son
+    10 MB que el cliente acaba de enviar, devolverlos duplicaría el tráfico.
+    """
+    pdf_hash = sha256_hex()
+    created = await create_document(client, pdf_hash=pdf_hash)
+
+    response = await client.get(f"{DOCUMENTS_URL}/by-checksum/{pdf_hash}")
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["id"] == created.json()["id"]
+    assert body["pdf_hash"] == pdf_hash
+    assert body["filename"] == "contrato-2026.pdf"
+    assert body["page_count"] == 3
+    assert "extracted_text" not in body
+
+
+async def test_by_checksum_rejects_a_malformed_hash_with_422(
+    client: httpx.AsyncClient,
+) -> None:
+    """D1: un `pdf_hash` que no sea 64 hex en minúsculas es un 422 del path param,
+    igual que en `by-hash` --no puede haber hashes a medias bajo dos contrato."""
+    response = await client.get(f"{DOCUMENTS_URL}/by-checksum/NO-666")
+
+    assert response.status_code == 422
+
+
 # ------------------------------------------------------ GET /documents/{doc_id}
 
 

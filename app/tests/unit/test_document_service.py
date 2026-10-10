@@ -110,6 +110,36 @@ async def test_find_by_hash_is_case_sensitive(service: DocumentService) -> None:
     assert result.exists is False
 
 
+# --------------------------------------- by-checksum (contrato del Orquestador)
+
+
+async def test_get_by_checksum_returns_the_document_when_it_exists(
+    service: DocumentService,
+) -> None:
+    """Contrato del Orquestador: `GET /by-checksum/{hash}` devuelve el documento
+    cuando el hash ya está persistido, para que el orquestador responda `REUSED`.
+    """
+    created = await service.create(make_request(HASH_A))
+
+    found = await service.get_by_checksum(HASH_A)
+
+    assert found.id == created.id
+    assert found.pdf_hash == HASH_A
+    assert found.filename == created.filename
+    assert found.page_count == created.page_count
+
+
+async def test_get_by_checksum_raises_not_found_when_absent(
+    service: DocumentService,
+) -> None:
+    """Contrato del Orquestador: a diferencia de `by-hash`, un hash desconocido en
+    `by-checksum` **es** un 404. El orquestador lo usa como señal de "no lo tengo,
+    extraer" (su cliente lo mapea a `ErrDocumentNotFound`), no como `exists: false`.
+    """
+    with pytest.raises(ResourceNotFoundException):
+        await service.get_by_checksum(HASH_A)
+
+
 # --------------------------------------------------------------------------- US-2
 
 

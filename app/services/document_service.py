@@ -8,6 +8,7 @@ contenedor global. Es lo que permite que un test construya un servicio real sobr
 un fake sin montar la aplicación.
 """
 
+from app.exceptions.domain import ResourceNotFoundException
 from app.models.pdf_document import StoredDocument
 from app.repositories.pdf_repository import PdfRepository
 from app.schemas.document import DocumentCreateRequest, HashExistsResponse
@@ -55,6 +56,20 @@ class DocumentService:
             id=document.id,
             uploaded_at=document.uploaded_at,
         )
+
+    async def get_by_checksum(self, pdf_hash: str) -> StoredDocument:
+        """Contrato del Orquestador: consulta por `pdf_hash` distinguiendo exista o no.
+
+        A diferencia de `find_by_hash`, aquí "no existe" **es** un error: el
+        Orquestador usa el 404 de `GET /by-checksum/{pdf_hash}` como señal de
+        control de flujo del dedup (no lo tiene → extraer), y su cliente lo mapea a
+        `ErrDocumentNotFound`. Por eso este método lanza
+        `ResourceNotFoundException` en vez de responder `exists: false`.
+        """
+        document = await self._repository.get_by_hash(pdf_hash)
+        if document is None:
+            raise ResourceNotFoundException(f"no existe un documento con pdf_hash {pdf_hash}")
+        return document
 
     async def get_by_id(self, document_id: str) -> StoredDocument:
         """Devuelve un documento por id.

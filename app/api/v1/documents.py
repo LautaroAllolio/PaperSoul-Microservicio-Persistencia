@@ -1,4 +1,4 @@
-"""Los 5 endpoints de documentos (SPEC.md §5.2).
+"""Los endpoints de documentos (SPEC.md §5.2, más el `by-checksum` del Orquestador).
 
 Los routers son la **capa 1**: traducen HTTP a llamadas de servicio y de vuelta. No
 contienen reglas de negocio y no conocen ni Mongo ni Beanie. Todo lo que hacen es
@@ -36,13 +36,19 @@ from app.api.dependencies import get_document_service, require_json_content_type
 from app.api.openapi_problem import problem_responses
 from app.schemas.document import (
     SHA256_HEX,
+    ChecksumMatchResponse,
     DocumentCreateRequest,
     DocumentListResponse,
     DocumentPersistedResponse,
     DocumentResponse,
     HashExistsResponse,
 )
-from app.schemas.mappers import to_list_response, to_persisted_response, to_response
+from app.schemas.mappers import (
+    to_checksum_match_response,
+    to_list_response,
+    to_persisted_response,
+    to_response,
+)
 from app.services.document_service import DocumentService
 
 # `status.HTTP_422_UNPROCESSABLE_ENTITY` sigue existiendo pero Starlette lo marca como
@@ -127,6 +133,38 @@ async def check_hash_exists(
     confundiendo "no lo tengo" con "me lo has mandado mal".
     """
     return await service.find_by_hash(pdf_hash)
+
+
+# `by-checksum` se declara junto a `by-hash`, ambas **antes** que `{doc_id}`: son
+# la misma intención (dos segmentos fijos frente al id de un segmento) y mantener el
+# orden de declaración explícito evita un 404 confuso si alguien reordena el archivo.
+@router.get(
+    "/by-checksum/{pdf_hash}",
+    response_model=ChecksumMatchResponse,
+    summary="Consulta un documento por su pdf_hash (contrato del Orquestador)",
+    responses=problem_responses(
+        {
+            status.HTTP_400_BAD_REQUEST: "El pdf_hash no tiene el formato exigido",
+            HTTP_422_UNPROCESSABLE_CONTENT: "El pdf_hash no cumple el patron",
+            status.HTTP_404_NOT_FOUND: "No existe ese pdf_hash",
+            status.HTTP_500_INTERNAL_SERVER_ERROR: "Error no controlado",
+        }
+    ),
+)
+async def get_document_by_checksum(
+    pdf_hash: Annotated[str, Path(pattern=SHA256_HEX, description="SHA-256 hex en minúsculas")],
+    service: DocumentServiceDep,
+) -> ChecksumMatchResponse:
+    """Contrato del Orquestador: `200` con el documento si existe, `404` si no.
+
+    A diferencia de `by-hash` (siempre `200` con `exists`), aquí el `404` es parte
+    del contrato, no un error: el Orquestador lo usa como control de flujo del dedup
+    (su cliente `FindByChecksum` lo mapea a `ErrDocumentNotFound` y extrae el PDF).
+    Por eso el `404` se documenta expresamente y no se cola como respuesta genérica.
+    """
+    stored = await service.get_by_checksum(pdf_hash)
+
+    return to_checksum_match_response(stored)
 
 
 @router.get(
