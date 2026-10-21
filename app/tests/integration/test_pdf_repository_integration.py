@@ -42,7 +42,7 @@ def fields_with(**overrides: object) -> PdfDocumentFields:
     aunque compartieran base de datos.
     """
     values: dict[str, object] = {
-        "pdf_hash": uuid4().hex,
+        "pdf_hash": uuid4().hex + uuid4().hex,
         "filename": "contrato.pdf",
         "extracted_text": "texto extraído",
         "extraction_method": ExtractionMethod.PYMUPDF,
@@ -64,7 +64,7 @@ async def test_mongo_creates_the_unique_index_on_pdf_hash(
     que Mongo guarda de verdad. Un `unique: true` que sólo existe en el modelo es una
     intención, no una restricción.
     """
-    collection = await PdfDocument.get_motor_collection()
+    collection = PdfDocument.get_motor_collection()
     indexes = await collection.index_information()
 
     assert "uniq_pdf_hash" in indexes, f"no hay índice único de pdf_hash: {list(indexes)}"
@@ -77,7 +77,7 @@ async def test_mongo_creates_the_descending_uploaded_at_index(
     """El índice de listado no es una optimización menor: es lo que hace que la
     consulta ordene sin un `SORT` en memoria. Sin él, paginar deja de escalar.
     """
-    collection = await PdfDocument.get_motor_collection()
+    collection = PdfDocument.get_motor_collection()
     indexes = await collection.index_information()
 
     assert "idx_uploaded_at_id_desc" in indexes, f"no hay índice de listado: {list(indexes)}"
@@ -296,7 +296,7 @@ async def test_uploaded_at_keeps_the_instant_through_a_round_trip(
     y la comparación falla con `can't compare offset-naive and offset-aware datetimes`.
     """
     repository = BeaniePdfRepository()
-    local_time = datetime(2026, 3, 1, 9, 0, tzinfo=timedelta(hours=-3))
+    local_time = datetime(2026, 3, 1, 9, 0, tzinfo=timezone(timedelta(hours=-3)))
 
     created = await repository.create(fields_with(uploaded_at=local_time))
     found = await repository.get_by_id(created.id)
