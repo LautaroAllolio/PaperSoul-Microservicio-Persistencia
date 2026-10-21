@@ -19,7 +19,8 @@
 uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest -m "not integration" --cov=app --cov-fail-under=85 && uv run pytest app/tests/test_architecture.py
 ```
 
-- **Corrección de tabla SC (Fase 0):** Se corrigieron rutas `tests/...` por `app/tests/...` y nombres de tests en la tabla SC de `SPEC.md`. Se agregó seguimiento para esta limpieza.
+- **Corrección de tabla SC (Fase 0):** Se corrigieron rutas `tests/...` por `app/tests/...` y nombres de tests en la tabla SC de `SPEC.md`. Commit `3f9b59a`.
+- **Correcciones de contrato (Fase 1–3):** Se documentó `by-checksum` en `SPEC.md`/`README.md`, se alineó `POST /api/v1/documents` con el Orquestador añadiendo `filename` y `page_count` a `DocumentPersistedResponse`, se actualizó el mapper y se agregó `app/tests/api/test_orchestrator_contract.py`. Commits `4390782`, `5b02c91`, `418660e`, `0287f7d`, `44de2a0`. Task 6 (X-Correlation-Id) queda como deuda separada.
 
 | Legenda | Significado |
 |---|---|
