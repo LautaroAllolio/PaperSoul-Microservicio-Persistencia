@@ -415,3 +415,8 @@ configuración, verificación mecánica de la arquitectura y advertencias de seg
 | SC-20 | 9.7 🔵 **sin ejecutar** |
 | SC-21 | 9.3 + 9.4 🟢 |
 | SC-22 | 3.5 + 9.3 🟢 |
+
+---
+
+## Limpieza de documentación
+- [ ] Corregir referencias rotas en la tabla SC de `SPEC.md` (rutas `tests/` → `app/tests/` y nombres de tests reales). Hecho en commit exclusivo `docs(spec): corrige rutas y nombres de tests rotos en la tabla SC`.
