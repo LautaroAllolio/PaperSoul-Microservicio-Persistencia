@@ -18,7 +18,7 @@ Por eso van marcados `integration` y sólo corren con Docker.
 una máquina con Docker, no con `pytest` a secas.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
