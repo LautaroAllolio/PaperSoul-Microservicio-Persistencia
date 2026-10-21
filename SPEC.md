@@ -300,11 +300,18 @@ DocumentResponse:
 ```yaml
 DocumentPersistedResponse:
   type: object
-  required: [id, status]
+  required: [id, status, filename, page_count]
   properties:
     id: { type: string }
     status: { type: string, enum: ["persisted"] }   # Constante, no campo persistido
+    filename: { type: string }
+    page_count: { type: integer, minimum: 1 }
 ```
+
+> Confirmación mínima del 201 para el Orquestador. Se añaden `filename` y `page_count` de forma
+> aditiva (el consumidor los espera). **No** devuelve `extracted_text` deliberadamente (puede tener
+> 10 MB). También puede incluir campos aditivos como `pdf_hash` y `uploaded_at` según implementación,
+> pero el contrato obligatorio para el Orquestador son `id`, `status`, `filename` y `page_count`.
 
 #### `DocumentListResponse`
 
@@ -420,7 +427,12 @@ ProblemDetail:
 **`POST /api/v1/documents`** — `201`, `Location: /api/v1/documents/{id}`
 
 ```json
-{ "id": "665f1c9e8a1b2c3d4e5f6071", "status": "persisted" }
+{
+  "id": "665f1c9e8a1b2c3d4e5f6071",
+  "status": "persisted",
+  "filename": "contrato-2026.pdf",
+  "page_count": 3
+}
 ```
 
 **`GET /api/v1/documents`** — query: `limit` (1..100, def. 20), `offset` (≥0, def. 0)
@@ -641,7 +653,7 @@ Cada criterio es binario y verificable con un comando.
 
 | ID | Criterio | Verificación |
 |---|---|---|
-| SC-01 | `POST` persiste un documento válido y responde `201` con `{"id","status":"persisted"}` y cabecera `Location` | `pytest app/tests/api/test_documents_api.py -k test_post_persists_and_answers_201` |
+| SC-01 | `POST` persiste un documento válido y responde `201` con `{"id","status":"persisted","filename","page_count"}` y cabecera `Location` | `pytest app/tests/api/test_documents_api.py -k test_post_persists_and_answers_201` |
 | SC-02 | `POST` con `pdf_hash` ya existente responde `409` + `type: ...document-hash-conflict` | `pytest app/tests/api/test_documents_api.py -k test_post_answers_409_on_a_duplicate_hash` |
 | SC-03 | El índice único `pdf_hash` existe **en Mongo real** y `get_motor_collection().index_information()` lo reporta con `unique: true` | `pytest app/tests/integration/test_pdf_repository_integration.py -k test_mongo_creates_the_unique_index_on_pdf_hash` |
 | SC-04 | `GET /by-hash/{h}` responde `200` con `exists:false, id:null, uploaded_at:null` cuando no existe — **no** 404 | `pytest app/tests/api/test_documents_api.py -k test_by_hash_answers_200_with_exists_false_when_absent` |
