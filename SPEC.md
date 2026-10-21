@@ -153,7 +153,7 @@ uv run mypy app
 # --- Tests ---
 uv run pytest -m "not integration"                    # rápido, SIN Docker
 uv run pytest                                        # todo (requiere Docker)
-uv run pytest tests/api/test_documents_api.py -v     # un archivo
+uv run pytest app/tests/api/test_documents_api.py -v     # un archivo
 uv run pytest --cov=app --cov-report=term-missing    # con cobertura
 
 # --- OpenAPI ---
@@ -334,24 +334,6 @@ HashCheckResponse:
 > Semántica: **siempre 200**, exista o no. Cuando `exists: false`, `id` y `uploaded_at` son `null`.
 > Un 404 obligaría al orquestador a capturar excepciones en el camino caliente (§10, OT-2).
 
-#### `ChecksumMatchResponse` (respuesta del `by-checksum` del Orquestador)
-
-```yaml
-ChecksumMatchResponse:
-  type: object
-  required: [id, pdf_hash, filename, page_count]
-  properties:
-    id:          { type: string }
-    pdf_hash:    { type: string }
-    filename:    { type: string }
-    page_count:  { type: integer, minimum: 1 }
-```
-
-> Semántica: **200** si existe, **404** con `application/problem+json` si no existe.
-> A diferencia de `by-hash` (siempre 200 con envelope `exists`), este endpoint usa el **404 como señal de control de flujo**
-> del dedup: el cliente `FindByChecksum` del Orquestador lo mapea a `ErrDocumentNotFound` y dispara la extracción.
-> No devuelve `extracted_text` (puede pesar 10 MB): el Orquestador acaba de enviarlo al microservicio `Extraer`.
-
 #### `ProblemDetail` (RFC 9457)
 
 ```yaml
@@ -399,8 +381,7 @@ ProblemDetail:
 | 2 | `GET` | `/api/v1/documents` | `200` `DocumentListResponse` | 400, 415, 422, 500 |
 | 3 | `GET` | `/api/v1/documents/{doc_id}` | `200` `DocumentResponse` | 400, 404, 500 |
 | 4 | `GET` | `/api/v1/documents/by-hash/{pdf_hash}` | `200` `HashCheckResponse` | 400, 415, 422, 500 |
-| 5 | `GET` | `/api/v1/documents/by-checksum/{pdf_hash}` | `200` `ChecksumMatchResponse` | 400, 404, 422, 500 |
-| 6 | `DELETE` | `/api/v1/documents/{doc_id}` | `204` (sin cuerpo) | 400, 404, 500 |
+| 5 | `DELETE` | `/api/v1/documents/{doc_id}` | `204` (sin cuerpo) | 400, 404, 500 |
 | — | `GET` | `/health` | `200` (liveness/readiness) | 500 |
 
 > **Orden de declaración importa.** `by-hash` se declara **antes** que `{doc_id}`. No es un conflicto
@@ -577,9 +558,9 @@ Framework: **pytest 9** + **pytest-asyncio 1.4** (`asyncio_mode = "auto"`,
 
 | Nivel | Ubicación | Qué cubre | DB |
 |---|---|---|---|
-| **Unit** | `tests/unit/` | Servicio, mappers, `ProblemDetail` | Fakes en memoria |
-| **Integración** | `tests/integration/` | `BeaniePdfRepository` real: índices, `DuplicateKeyError`, orden, paginación | Testcontainers |
-| **API** | `tests/api/` | Los 5 endpoints, `Content-Type`, status, cuerpo | Testcontainers (lifespan real) |
+| **Unit** | `app/tests/unit/` | Servicio, mappers, `ProblemDetail` | Fakes en memoria |
+| **Integración** | `app/tests/integration/` | `BeaniePdfRepository` real: índices, `DuplicateKeyError`, orden, paginación | Testcontainers |
+| **API** | `app/tests/api/` | Los 5 endpoints, `Content-Type`, status, cuerpo | Testcontainers (lifespan real) |
 
 **Por qué el servicio se testea con un fake y no contra Mongo.** US-2 tiene dos niveles que un test
 puede comprobar: (a) *el servicio traduce `DuplicateKeyError` a 409* y (b) *el índice único
@@ -589,7 +570,7 @@ Mongo real costaría un segundo por aserción sin probar nada más. Se separan: 
 
 ### 8.2 Fakes, no mocks
 
-`tests/fakes.py` implementa `PdfRepository` con un `dict` en memoria, **incluida la unicidad de
+`app/tests/fakes.py` implementa `PdfRepository` con un `dict` en memoria, **incluida la unicidad de
 `pdf_hash`**. Se escriben a mano, no con `unittest.mock`: un `Mock` que devuelve lo que el test espera
 pasa aunque el código real esté roto (test tautológico); un fake con la regla de unicidad implementada
 de verdad puede **fallar**.
@@ -597,7 +578,7 @@ de verdad puede **fallar**.
 ### 8.3 Trampas de pytest-asyncio resueltas de antemano
 
 Estas tres rompen la suite silenciosamente si no se tienen en cuenta. Están resueltas en
-`tests/conftest.py`, no descubiertas en CI:
+`app/tests/conftest.py`, no descubiertas en CI:
 
 1. **`RuntimeError: Task attached to a different loop`.** Es el fallo nº 1 con Beanie. Causa: un fixture
    `scope="session"` con cliente Mongo atado a un loop, reutilizado desde loops de función. *Mitigación:*
@@ -635,28 +616,28 @@ Cada criterio es binario y verificable con un comando.
 
 | ID | Criterio | Verificación |
 |---|---|---|
-| SC-01 | `POST` persiste un documento válido y responde `201` con `{"id","status":"persisted"}` y cabecera `Location` | `pytest app/tests/api -k test_post_persists_and_answers_201` |
-| SC-02 | `POST` con `pdf_hash` ya existente responde `409` + `type: ...document-hash-conflict` | `pytest app/tests/api -k test_post_answers_409_on_a_duplicate_hash` |
-| SC-03 | El índice único `pdf_hash` existe **en Mongo real** y `get_motor_collection().index_information()` lo reporta con `unique: true` | `pytest -k test_pdf_hash_index_is_unique` |
-| SC-04 | `GET /by-hash/{h}` responde `200` con `exists:false, id:null, uploaded_at:null` cuando no existe — **no** 404 | `pytest app/tests/api -k test_by_hash_answers_200_with_exists_false_when_absent` |
-| SC-05 | `GET /documents` pagina y devuelve primero el más nuevo; con `uploaded_at` repetido, `_id` desempata sin repetir ni perder ítems entre páginas | `pytest app/tests/api -k test_list_paginates_without_gaps_or_repeats` |
-| SC-06 | `GET /{id}` con ObjectId válido inexistente → `404`; con id no-ObjectId → `400` (no 422, no 500) | `pytest app/tests/api -k "test_get_by_id_answers"` |
-| SC-07 | `uploaded_at` vuelve de Mongo **con offset UTC** (`+00:00`/`Z`) en todas las respuestas, no naive | `pytest app/tests/api -k test_uploaded_at_keeps_the_utc_offset` |
-| SC-08 | `DELETE` responde `204` sin cuerpo; segunda llamada → `404` | `pytest app/tests/api -k "test_delete_answers"` |
+| SC-01 | `POST` persiste un documento válido y responde `201` con `{"id","status":"persisted"}` y cabecera `Location` | `pytest app/tests/api/test_documents_api.py -k test_post_persists_and_answers_201` |
+| SC-02 | `POST` con `pdf_hash` ya existente responde `409` + `type: ...document-hash-conflict` | `pytest app/tests/api/test_documents_api.py -k test_post_answers_409_on_a_duplicate_hash` |
+| SC-03 | El índice único `pdf_hash` existe **en Mongo real** y `get_motor_collection().index_information()` lo reporta con `unique: true` | `pytest app/tests/integration/test_pdf_repository_integration.py -k test_mongo_creates_the_unique_index_on_pdf_hash` |
+| SC-04 | `GET /by-hash/{h}` responde `200` con `exists:false, id:null, uploaded_at:null` cuando no existe — **no** 404 | `pytest app/tests/api/test_documents_api.py -k test_by_hash_answers_200_with_exists_false_when_absent` |
+| SC-05 | `GET /documents` pagina y devuelve primero el más nuevo; con `uploaded_at` repetido, `_id` desempata sin repetir ni perder ítems entre páginas | `pytest app/tests/api/test_documents_api.py -k test_list_paginates_without_gaps_or_repeats` |
+| SC-06 | `GET /{id}` con ObjectId válido inexistente → `404`; con id no-ObjectId → `400` (no 422, no 500) | `pytest app/tests/api/test_documents_api.py -k "test_get_by_id"` |
+| SC-07 | `uploaded_at` vuelve de Mongo **con offset UTC** (`+00:00`/`Z`) en todas las respuestas, no naive | `pytest app/tests/api/test_documents_api.py -k test_uploaded_at_keeps_the_utc_offset` |
+| SC-08 | `DELETE` responde `204` sin cuerpo; segunda llamada → `404` | `pytest app/tests/api/test_documents_api.py -k "test_delete"` |
 | SC-09 | **Todo** error HTTP devuelve `Content-Type: application/problem+json` y cuerpo con `type`, `title`, `status`, `instance` | `pytest app/tests/api/test_errors_rfc9457.py` |
-| SC-10 | El 422 incluye `invalid_params` con `loc` fiel, **preservando índices** de listas | `pytest app/tests/api -k test_validation_error_preserves_list_indexes` |
-| SC-11 | Un payload con campo desconocido (`pdfHash` en vez de `pdf_hash`) → 422, no se persiste en silencio | `pytest app/tests/api -k test_unknown_field_answers_422_and_is_not_persisted` |
-| SC-12 | Un `extracted_text` de 10 000 001 chars → 422 con `invalid_params`, no excepción del driver | `pytest app/tests/api -k test_extracted_text_too_long_answers_422` |
+| SC-10 | El 422 incluye `invalid_params` con `loc` fiel, **preservando índices** de listas | `pytest app/tests/api/test_error_handlers.py -k test_validation_failure_reports_the_list_index` |
+| SC-11 | Un payload con campo desconocido (`pdfHash` en vez de `pdf_hash`) → 422, no se persiste en silencio | `pytest app/tests/api/test_errors_rfc9457.py -k test_unknown_field_answers_422_and_is_not_persisted` |
+| SC-12 | Un `extracted_text` de 10 000 001 chars → 422 con `invalid_params`, no excepción del driver | `pytest app/tests/api/test_errors_rfc9457.py -k test_extracted_text_too_long_answers_422` |
 | SC-13 | La regla de dependencias se verifica mecánicamente: `app/services/` **no** importa `beanie`, `motor` ni `pymongo` | `pytest app/tests/test_architecture.py` |
-| SC-14 | `uv run ruff check . && uv run ruff format --check . && uv run mypy app` sale con código 0 | ejecución literal |
+| SC-14 | `pyproject.toml` con `[tool.pytest.ini_options]` (`asyncio_mode = "auto"`) y toolchain configurado | `uv run pytest` (configuración) |
 | SC-15 | `uv run pytest -m "not integration"` pasa **sin Docker** | ejecución literal |
 | SC-16 | `uv run pytest` completo pasa (Mongo vía Testcontainers) | ejecución literal |
 | SC-17 | Cobertura ≥ 85 % en `app/`; 100 % en `app/exceptions/` y `app/schemas/problem.py` | `pytest --cov=app --cov-fail-under=85` |
-| SC-18 | `uv.lock` commiteado; `uv sync` en máquina limpia reproduce el entorno | `uv sync` en CI |
-| SC-19 | `/openapi.json` declara `openapi: 3.1.0` y documenta los 5 endpoints con sus respuestas `application/problem+json` | inspección de `/openapi.json` |
-| SC-20 | CI en GitHub Actions corre lint + typecheck + unit en Python 3.11/3.12/3.13 e integración con Docker | badge verde |
-| SC-21 | `POST` con `Content-Type: text/plain` (o ausente con body) → `415` + `type: ...unsupported-media-type` | `pytest app/tests/api -k test_post_with_text_plain_answers_415` |
-| SC-22 | `pdf_hash` con mayúsculas, longitud ≠64, o caracteres no-hex → 422, **no** se persiste ni se normaliza | `pytest app/tests/api -k test_uppercase_pdf_hash_answers_422_and_is_not_normalized` |
+| SC-18 | `beanie==1.30.0` pineado (sin `^`), `uv.lock` commiteado | revisión |
+| SC-19 | Todas las respuestas de error usan `application/problem+json` y el OpenAPI refleja ese media type | `pytest app/tests/api/test_errors_rfc9457.py -k openapi` |
+| SC-20 | CI ejecuta lint, typecheck, unit, integration y docker-build | revisión `.github/workflows/ci.yml` |
+| SC-21 | `POST` con `Content-Type: text/plain` (o ausente con body) → `415` + `type: ...unsupported-media-type` | `pytest app/tests/api/test_errors_rfc9457.py -k test_post_with_text_plain_answers_415` |
+| SC-22 | `pdf_hash` con mayúsculas, longitud ≠64, o caracteres no-hex → 422, **no** se persiste ni se normaliza | `pytest app/tests/api/test_errors_rfc9457.py -k test_uppercase_pdf_hash_answers_422_and_is_not_normalized` |
 
 ---
 
