@@ -8,7 +8,7 @@
 # Documentación y especificación: no se usan en runtime.
 SPEC.md
 tasks/
-README.md
+# README.md
 LICENSE
 
 # Entorno local y secretos: NUNCA deben entrar en la imagen.
