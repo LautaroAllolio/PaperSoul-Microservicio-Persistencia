@@ -334,6 +334,24 @@ HashCheckResponse:
 > Semántica: **siempre 200**, exista o no. Cuando `exists: false`, `id` y `uploaded_at` son `null`.
 > Un 404 obligaría al orquestador a capturar excepciones en el camino caliente (§10, OT-2).
 
+#### `ChecksumMatchResponse` (respuesta del `by-checksum` del Orquestador)
+
+```yaml
+ChecksumMatchResponse:
+  type: object
+  required: [id, pdf_hash, filename, page_count]
+  properties:
+    id:          { type: string }
+    pdf_hash:    { type: string }
+    filename:    { type: string }
+    page_count:  { type: integer, minimum: 1 }
+```
+
+> Semántica: **200** si existe, **404** con `application/problem+json` si no existe.
+> A diferencia de `by-hash` (siempre 200 con envelope `exists`), este endpoint usa el **404 como señal de control de flujo**
+> del dedup: el cliente `FindByChecksum` del Orquestador lo mapea a `ErrDocumentNotFound` y dispara la extracción.
+> No devuelve `extracted_text` (puede pesar 10 MB): el Orquestador acaba de enviarlo al microservicio `Extraer`.
+
 #### `ProblemDetail` (RFC 9457)
 
 ```yaml
@@ -381,7 +399,8 @@ ProblemDetail:
 | 2 | `GET` | `/api/v1/documents` | `200` `DocumentListResponse` | 400, 415, 422, 500 |
 | 3 | `GET` | `/api/v1/documents/{doc_id}` | `200` `DocumentResponse` | 400, 404, 500 |
 | 4 | `GET` | `/api/v1/documents/by-hash/{pdf_hash}` | `200` `HashCheckResponse` | 400, 415, 422, 500 |
-| 5 | `DELETE` | `/api/v1/documents/{doc_id}` | `204` (sin cuerpo) | 400, 404, 500 |
+| 5 | `GET` | `/api/v1/documents/by-checksum/{pdf_hash}` | `200` `ChecksumMatchResponse` | 400, 404, 422, 500 |
+| 6 | `DELETE` | `/api/v1/documents/{doc_id}` | `204` (sin cuerpo) | 400, 404, 500 |
 | — | `GET` | `/health` | `200` (liveness/readiness) | 500 |
 
 > **Orden de declaración importa.** `by-hash` se declara **antes** que `{doc_id}`. No es un conflicto
