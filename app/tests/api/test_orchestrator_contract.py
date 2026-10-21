@@ -3,8 +3,6 @@
 Congela lo que el Orquestador decodifica en StoredDocumentResponse.
 """
 
-from datetime import UTC, datetime
-
 import httpx
 
 from app.tests.api.conftest import DOCUMENTS_URL, document_payload
