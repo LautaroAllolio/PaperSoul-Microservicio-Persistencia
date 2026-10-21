@@ -334,6 +334,26 @@ HashCheckResponse:
 > Semántica: **siempre 200**, exista o no. Cuando `exists: false`, `id` y `uploaded_at` son `null`.
 > Un 404 obligaría al orquestador a capturar excepciones en el camino caliente (§10, OT-2).
 
+#### `ChecksumMatchResponse` (respuesta del `by-checksum`)
+
+```yaml
+ChecksumMatchResponse:
+  type: object
+  required: [id, pdf_hash, filename, page_count]
+  properties:
+    id:          { type: string }
+    pdf_hash:    { type: string }
+    filename:    { type: string }
+    page_count:  { type: integer, minimum: 1 }
+```
+
+> Contrato del Orquestador: devuelve **solo** los campos que necesita para su respuesta `REUSED`
+> (`id`, `pdf_hash`, `filename`, `page_count`). No devuelve `extracted_text` deliberadamente (puede
+> tener 10 MB y el PDF acaba de enviarse). A diferencia de `by-hash` (siempre `200` con `exists`),
+> este endpoint responde **404 con problem JSON** si el hash no existe: el Orquestador consume el 404
+> como señal de control de flujo del dedup ("no lo tengo, extraer"), mapeándolo a
+> `ErrDocumentNotFound`.
+
 #### `ProblemDetail` (RFC 9457)
 
 ```yaml
@@ -381,12 +401,17 @@ ProblemDetail:
 | 2 | `GET` | `/api/v1/documents` | `200` `DocumentListResponse` | 400, 415, 422, 500 |
 | 3 | `GET` | `/api/v1/documents/{doc_id}` | `200` `DocumentResponse` | 400, 404, 500 |
 | 4 | `GET` | `/api/v1/documents/by-hash/{pdf_hash}` | `200` `HashCheckResponse` | 400, 415, 422, 500 |
-| 5 | `DELETE` | `/api/v1/documents/{doc_id}` | `204` (sin cuerpo) | 400, 404, 500 |
+| 5 | `GET` | `/api/v1/documents/by-checksum/{pdf_hash}` | `200` `ChecksumMatchResponse` | 400, 404, 422, 500 |
+| 6 | `DELETE` | `/api/v1/documents/{doc_id}` | `204` (sin cuerpo) | 400, 404, 500 |
 | — | `GET` | `/health` | `200` (liveness/readiness) | 500 |
 
-> **Orden de declaración importa.** `by-hash` se declara **antes** que `{doc_id}`. No es un conflicto
-> real (`/documents/by-hash/abc` tiene 2 segmentos, `/documents/{doc_id}` tiene 1), pero declararlo
-> primero hace la intención explícita y sobrevive a futuros cambios de rutas.
+> **Orden de declaración importa.** `by-hash` y `by-checksum` se declaran **antes** que `{doc_id}`. No es
+> un conflicto real, pero declarar rutas específicas antes de la genérica hace la intención explícita y
+> sobrevive a futuros cambios de rutas. 
+> 
+> **`by-hash` vs `by-checksum`:** `by-hash` responde **siempre 200** con el envelope `{exists, id, uploaded_at}`.
+> `by-checksum` responde **200** con `ChecksumMatchResponse` si existe, o **404 con problem JSON** si no
+> existe. El 404 es intencional: es señal de control de flujo del dedup para el Orquestador.
 
 > **`Content-Type` sólo se exige donde hay body.** En GET/DELETE se acepta su ausencia (no llevan
 > cuerpo) y se rechaza cualquier `Content-Type` explícito que no sea JSON. En POST es obligatorio
