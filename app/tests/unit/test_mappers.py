@@ -139,6 +139,8 @@ def test_to_persisted_response_returns_only_the_confirmation_fields() -> None:
     response = to_persisted_response(make_stored())
 
     assert response.id == DOCUMENT_ID
+    assert response.filename == "contrato.pdf"
+    assert response.page_count == 3
     assert response.pdf_hash == PDF_HASH
     assert response.uploaded_at == MOMENT
     assert "extracted_text" not in type(response).model_fields

@@ -36,13 +36,14 @@ def to_response(document: StoredDocument) -> DocumentResponse:
 def to_persisted_response(document: StoredDocument) -> DocumentPersistedResponse:
     """Modelo de persistencia → confirmación del 201.
 
-    Proyecta sólo tres campos a propósito, no un subconjunto arbitrario: la
-    respuesta del 201 existe para confirmar la persistencia, y devolver los 10 MB
-    de `extracted_text` que el cliente acaba de enviar duplicaría el tráfico sin
-    aportar nada.
+    Proyecta los campos necesarios para confirmar la persistencia sin devolver
+    `extracted_text` (puede tener 10 MB). `filename` y `page_count` se incluyen
+    para alinearse con el contrato del Orquestador.
     """
     return DocumentPersistedResponse(
         id=document.id,
+        filename=document.filename,
+        page_count=document.page_count,
         pdf_hash=document.pdf_hash,
         uploaded_at=document.uploaded_at,
     )

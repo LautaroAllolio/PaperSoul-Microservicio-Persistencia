@@ -79,18 +79,21 @@ class DocumentPersistedResponse(BaseModel):
     No devuelve `extracted_text` a propósito. Puede tener 10 MB, y el orquestador
     acaba de enviarlo: devolvérselo duplica el tráfico de una respuesta cuyo único
     propósito es confirmar que se guardó.
+
+    `filename` y `page_count` se añaden para alinearse con el contrato del Orquestador.
+    `pdf_hash` y `uploaded_at` son aditivos y ahorran una segunda petición.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     id: str
     # `Literal` y no `str`: el status es una **constante del contrato de
     # transporte**, no un estado persistido (SPEC.md §1). Al tiparlo como literal, un
     # cambio accidental de valor rompe el test en vez de colarse en producción como un
     # string nuevo que el orquestador no reconoce.
-    #
-    # `pdf_hash` y `uploaded_at` se incluyen además de los dos campos que exige
-    # SPEC.md §5.1: son aditivos y ahorran al orquestador una segunda petición para
-    # confirmar qué se guardó. No rompen a un cliente que lea `id` y `status`.
     status: Literal["persisted"] = "persisted"
+    filename: str
+    page_count: Annotated[int, Field(ge=1)]
     pdf_hash: str
     uploaded_at: datetime
 
