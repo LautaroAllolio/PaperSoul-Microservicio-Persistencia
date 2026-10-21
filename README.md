@@ -102,7 +102,8 @@ Prefijo: `/api/v1`. Especificación OpenAPI 3.1 en `/openapi.json`; interfaz Swa
 | 2 | `GET` | `/api/v1/documents` | `200` | 422, 500 |
 | 3 | `GET` | `/api/v1/documents/{doc_id}` | `200` | 400, 404, 422, 500 |
 | 4 | `GET` | `/api/v1/documents/by-hash/{pdf_hash}` | `200` en todo caso | 400, 415, 422, 500 |
-| 5 | `DELETE` | `/api/v1/documents/{doc_id}` | `204` sin cuerpo | 400, 404, 422, 500 |
+| 5 | `GET` | `/api/v1/documents/by-checksum/{pdf_hash}` | `200` | 400, 404, 422, 500 |
+| 6 | `DELETE` | `/api/v1/documents/{doc_id}` | `204` sin cuerpo | 400, 404, 422, 500 |
 | — | `GET` | `/health` | `200` | — |
 
 ### 2.1 Creación de un documento
@@ -130,14 +131,17 @@ Content-Type: application/json
 {
   "id": "665f1c9e8a1b2c3d4e5f6071",
   "status": "persisted",
+  "filename": "contrato-2026.pdf",
+  "page_count": 3,
   "pdf_hash": "e03726ed…",
   "uploaded_at": "2026-10-05T21:10:22.445539Z"
 }
 ```
 
 El cuerpo de la respuesta omite deliberadamente `extracted_text`, cuyo volumen puede
-alcanzar los 10 MB: se trata de un campo que el cliente acaba de remitir. Se incluyen
-`pdf_hash` y `uploaded_at` porque permiten confirmar el registro persistido sin
+alcanzar los 10 MB: se trata de un campo que el cliente acaba de remitir. Para alinearse
+con el contrato del Orquestador se incluyen `filename` y `page_count`. También se incluyen
+`pdf_hash` y `uploaded_at` como campos aditivos para confirmar el registro persistido sin
 requerir una segunda petición.
 
 **Definición del cuerpo de la solicitud**
@@ -186,7 +190,23 @@ consulta «¿ha sido ya enviado este PDF?» admite respuesta negativa con la mis
 naturalidad que afirmativa; asignar `404` obligaría al consumidor a tratar la ausencia
 del recurso como una condición de error.
 
-### 2.4 Listado paginado
+### 2.4 Consulta por checksum (contrato del Orquestador)
+
+```http
+GET /api/v1/documents/by-checksum/e03726ed…
+```
+
+```json
+{ "id": "665f1c9e8a1b2c3d4e5f6071", "pdf_hash": "e03726ed…", "filename": "contrato-2026.pdf", "page_count": 3 }
+```
+
+Este recurso responde `200` con los campos que el Orquestador necesita para su respuesta
+`REUSED` (`id`, `pdf_hash`, `filename`, `page_count`), sin `extracted_text`. Si no existe,
+responde `404` con cuerpo RFC 9457 `application/problem+json`. A diferencia de `by-hash`
+(siempre `200`), el `404` es intencional y se utiliza como señal de control de flujo del
+dedup.
+
+### 2.5 Listado paginado
 
 ```http
 GET /api/v1/documents?limit=20&offset=0
@@ -209,7 +229,7 @@ repetirse o omitirse al paginar.
 { "items": [ … ], "total": 42, "limit": 20, "offset": 0 }
 ```
 
-### 2.5 Eliminación
+### 2.6 Eliminación
 
 ```http
 DELETE /api/v1/documents/665f1c9e8a1b2c3d4e5f6071
@@ -219,7 +239,7 @@ Responde `204` sin cuerpo. Una segunda invocación sobre el mismo identificador 
 `404`. La semántica deliberadamente no es idempotente en cuanto al código de estado,
 por lo que `404` constituye la respuesta precisa en lugar de un segundo `204`.
 
-### 2.6 Sonda de estado
+### 2.7 Sonda de estado
 
 ```http
 GET /health
