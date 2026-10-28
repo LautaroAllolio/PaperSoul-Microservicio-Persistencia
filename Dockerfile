@@ -21,6 +21,8 @@ RUN uv sync --frozen --no-dev
 # --- Etapa runtime: sólo el venv y el código ---------------------------------
 FROM python:3.11-slim AS runtime
 
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 # Ejecutar como usuario no-root: el proceso no necesita escribir en el sistema.
 RUN useradd --create-home --uid 1000 appuser
 
