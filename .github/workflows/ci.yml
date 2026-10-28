@@ -129,3 +129,10 @@ jobs:
           tags: papersoul-persistencia:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Escanear vulnerabilidades con Grype
+        uses: anchore/scan-action@v3
+        with:
+          image: "papersoul-persistencia:ci"
+          fail-build: true
+          severity-cutoff: high
