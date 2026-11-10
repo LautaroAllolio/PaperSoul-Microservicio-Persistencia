@@ -29,7 +29,7 @@ def test_problem_type_values_are_unique() -> None:
 
 
 def test_problem_type_covers_the_full_status_taxonomy() -> None:
-    """La taxonomia de SPEC.md §5.3 esta completa: 7 tipos.
+    """La taxonomia de problemas de la API esta completa: 8 tipos.
 
     Si se anade un error nuevo y no se actualiza la spec, este test no lo detecta,
     pero obliga a revisar la lista cada vez que se toca.
@@ -41,6 +41,7 @@ def test_problem_type_covers_the_full_status_taxonomy() -> None:
         "REQUEST_VALIDATION_FAILED",
         "DOCUMENT_NOT_FOUND",
         "DOCUMENT_HASH_CONFLICT",
+        "DATABASE_UNAVAILABLE",
         "INTERNAL_ERROR",
     }
 

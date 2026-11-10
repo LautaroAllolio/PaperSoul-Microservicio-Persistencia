@@ -27,6 +27,12 @@ class Settings(BaseSettings):
 
     mongodb_uri: str = "mongodb://localhost:27017"
     mongodb_database: str = "papersoul"
+    consul_http_addr: str = "http://consul:8500"
+    service_name: str = "persistencia"
+    service_port: int = 8000
+    service_id: str | None = None
+    advertise_addr: str | None = None
+    consul_enabled: bool = True
     log_level: str = "INFO"
     problem_type_base: str = "urn:problem:papersoul"
 

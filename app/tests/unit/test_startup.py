@@ -83,6 +83,19 @@ def returning(client: FakeClient) -> ClientFactory:
     return factory
 
 
+@pytest.fixture(autouse=True)
+def disable_consul_for_database_lifespan_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Los tests de Mongo no deben abrir conexiones contra un agente Consul real."""
+    from app import main
+    from app.core.config import Settings
+
+    monkeypatch.setattr(
+        main,
+        "get_settings",
+        lambda: Settings(_env_file=None, consul_enabled=False),
+    )
+
+
 # --------------------------------------------------------------- core/database.py
 
 
@@ -219,6 +232,40 @@ async def test_lifespan_closes_the_database_on_shutdown() -> None:
         assert client.closed is False
 
     assert client.closed is True
+
+
+async def test_lifespan_registers_and_deregisters_consul(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Consul se conecta al arranque y se desregistra al cerrar el lifespan."""
+    from app import main
+    from app.core.config import Settings
+
+    events: list[str] = []
+
+    class RecordingRegistrar:
+        def __init__(self, _settings: Settings) -> None:
+            pass
+
+        async def start(self) -> None:
+            events.append("registered")
+
+        async def stop(self) -> None:
+            events.append("deregistered")
+
+    monkeypatch.setattr(main, "get_settings", lambda: Settings(_env_file=None))
+    monkeypatch.setattr(main, "ConsulRegistrar", RecordingRegistrar, raising=False)
+
+    app = create_app(
+        repository=FakePdfRepository(),
+        client_factory=returning(FakeClient()),
+        init_beanie_func=RecordingInitBeanie(),
+    )
+
+    async with LifespanManager(app):
+        assert events == ["registered"]
+
+    assert events == ["registered", "deregistered"]
 
 
 async def test_lifespan_opens_the_connection_before_serving() -> None:

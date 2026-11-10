@@ -3,8 +3,8 @@
 Dos funciones, y la separación es deliberada:
 
 - `create_app(...)` construye el objeto `FastAPI` sin abrir ninguna conexión.
-- `lifespan(...)` es el que conecta y desconecta Mongo, y se ejecuta al arrancar
-  y apagar el servidor.
+- `lifespan(...)` conecta y desconecta Mongo, y administra el registro en Consul al
+  arrancar y apagar el servidor.
 
 `create_app` recibe el repositorio, así que una app entera se monta con un fake y
 sin Docker. Es la condición para que los tests de API existan antes de que haya una
@@ -24,6 +24,7 @@ from app.api.health import router as health_router
 from app.api.openapi_problem import use_problem_media_types
 from app.api.v1.router import api_router
 from app.core.config import get_settings
+from app.core.consul import ConsulRegistrar
 from app.core.container import Container, build_container
 from app.core.database import (
     ClientFactory,
@@ -86,6 +87,8 @@ def create_app(
         regla que en cualquier gestión de recursos: se adquiere fuera del bloque
         que garantiza la liberación.
         """
+        consul_registrar = ConsulRegistrar(settings) if settings.consul_enabled else None
+        consul_started = False
         client = client_factory(settings.mongodb_uri)
         try:
             database = await init_database(
@@ -95,11 +98,20 @@ def create_app(
             )
             app.state.mongo_client = client
             app.state.mongo_database = database
+            if consul_registrar is not None:
+                await consul_registrar.start()
+                consul_started = True
             yield
         finally:
-            await close_database(client)
-            app.state.mongo_client = None
-            app.state.mongo_database = None
+            try:
+                if consul_registrar is not None and consul_started:
+                    await consul_registrar.stop()
+            finally:
+                try:
+                    await close_database(client)
+                finally:
+                    app.state.mongo_client = None
+                    app.state.mongo_database = None
 
     app = FastAPI(
         title=settings.app_title,

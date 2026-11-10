@@ -105,6 +105,7 @@ Prefijo: `/api/v1`. Especificación OpenAPI 3.1 en `/openapi.json`; interfaz Swa
 | 5 | `GET` | `/api/v1/documents/by-checksum/{pdf_hash}` | `200` | 400, 404, 422, 500 |
 | 6 | `DELETE` | `/api/v1/documents/{doc_id}` | `204` sin cuerpo | 400, 404, 422, 500 |
 | — | `GET` | `/health` | `200` | — |
+| — | `GET` | `/ready` | `200` si Mongo está disponible | 503 |
 
 ### 2.1 Creación de un documento
 
@@ -365,9 +366,17 @@ Verificación:
 ```bash
 curl http://localhost:8000/health
 # {"status":"ok"}
+
+curl http://localhost:8000/ready
+# {"status":"ready","database":"connected"}
 ```
 
 La interfaz Swagger se encuentra en `http://localhost:8000/docs`.
+
+En un entorno con Consul y Traefik, el servicio se anuncia en la ruta local
+`https://persistencia.universidad.localhost`. El router de Traefik acepta únicamente
+el método `GET` (rutas de lectura); el nombre local y el certificado TLS deben estar
+configurados en ese entorno.
 
 ### 4.3 Ejecución mediante contenedor
 
@@ -438,8 +447,19 @@ Verifican los aspectos que no pueden comprobarse mediante un doble de prueba:
 |---|---|---|
 | `MONGODB_URI` | `mongodb://localhost:27017` | Cadena de conexión a MongoDB |
 | `MONGODB_DATABASE` | `papersoul` | Nombre de la base de datos |
+| `CONSUL_HTTP_ADDR` | `http://consul:8500` | URL HTTP del agente Consul |
+| `SERVICE_NAME` | `persistencia` | Nombre del servicio en Consul |
+| `SERVICE_PORT` | `8000` | Puerto anunciado del servicio |
+| `SERVICE_ID` | generado por réplica | ID único; si se omite, se genera uno automáticamente |
+| `ADVERTISE_ADDR` | IPv4 detectada | Dirección anunciada; si se omite, se detecta una IPv4 no loopback |
+| `CONSUL_ENABLED` | `true` | Habilita el registro y desregistro en Consul |
 | `LOG_LEVEL` | `INFO` | Nivel de registro |
 | `PROBLEM_TYPE_BASE` | `urn:problem:papersoul` | Prefijo de los URN de `type` |
+
+Si Consul no está disponible durante el arranque, la aplicación continúa y reintenta
+el registro en segundo plano con backoff exponencial. Al apagar el servicio, se solicita
+el desregistro al agente. Para desarrollo sin Consul se puede establecer
+`CONSUL_ENABLED=false`.
 
 La modificación de `PROBLEM_TYPE_BASE` constituye un cambio incompatible: los
 identificadores `type` constituyen la clave del contrato de error.
