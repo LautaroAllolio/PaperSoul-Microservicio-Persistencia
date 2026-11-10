@@ -28,4 +28,5 @@ class ProblemType(StrEnum):
     REQUEST_VALIDATION_FAILED = f"{PROBLEM_TYPE_PREFIX}:request-validation-failed"
     DOCUMENT_NOT_FOUND = f"{PROBLEM_TYPE_PREFIX}:document-not-found"
     DOCUMENT_HASH_CONFLICT = f"{PROBLEM_TYPE_PREFIX}:document-hash-conflict"
+    DATABASE_UNAVAILABLE = f"{PROBLEM_TYPE_PREFIX}:database-unavailable"
     INTERNAL_ERROR = f"{PROBLEM_TYPE_PREFIX}:internal-error"

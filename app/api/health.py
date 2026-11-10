@@ -1,21 +1,17 @@
-"""Sonda de salud.
+"""Sondas de salud y disponibilidad del servicio."""
 
-Un endpoint de salud que no comprueba nada es peor que no tener ninguno: da una
-respuesta verde a un servicio incapable de atender una petición real, y quien
-vigila el despliegue deja de mirar por el otro extremo.
+import asyncio
+import logging
 
-Por eso hay dos, con significados distintos:
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 
-- `/health`: el proceso está vivo. Lo usa el orquestador para decidir si reiniciar.
-- `/ready`: además puede atender tráfico. Es lo que un balanceador debería mirar.
-
-Aquí sólo se implementa `/health`. `/ready` llega con el contenedor de
-dependencias en S4, porque necesita saber si hay conexión con la base de datos.
-"""
-
-from fastapi import APIRouter
+from app.api.errors import new_trace_id, problem_response
+from app.core.problem_types import ProblemType
+from app.schemas.problem import ProblemDetail
 
 router = APIRouter(tags=["health"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/health")
@@ -27,3 +23,28 @@ async def health() -> dict[str, str]:
     que es justo lo contrario de lo que se quiere.
     """
     return {"status": "ok"}
+
+
+@router.get("/ready")
+async def ready(request: Request) -> JSONResponse:
+    """Comprueba si Mongo puede atender una operación en un máximo de 500 ms."""
+    try:
+        mongo_client = request.app.state.mongo_client
+        if mongo_client is None:
+            raise ConnectionError("MongoDB client is not initialized")
+        await asyncio.wait_for(mongo_client.admin.command("ping"), timeout=0.5)
+    except Exception:
+        trace_id = new_trace_id()
+        logger.exception("MongoDB no está disponible [trace_id=%s]", trace_id)
+        return problem_response(
+            ProblemDetail(
+                type=ProblemType.DATABASE_UNAVAILABLE,
+                title="Base de datos no disponible",
+                status=503,
+                detail="La base de datos no está disponible.",
+                instance=request.url.path,
+                trace_id=trace_id,
+            )
+        )
+
+    return JSONResponse(content={"status": "ready", "database": "connected"})

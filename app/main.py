@@ -8,7 +8,8 @@ Dos funciones, y la separación es deliberada:
 
 `create_app` recibe el repositorio, así que una app entera se monta con un fake y
 sin Docker. Es la condición para que los tests de API existan antes de que haya una
-base de datos.
+base de datos. `/health` sólo comprueba liveness; `/ready` comprueba Mongo antes
+de anunciar disponibilidad.
 """
 
 import logging
@@ -108,6 +109,8 @@ def create_app(
     # Antes del lifespan a propósito: los routers resuelven el servicio por `Depends`
     # al atender la primera petición, y para entonces el contenedor ya está aquí.
     app.state.container = container
+    app.state.mongo_client = None
+    app.state.mongo_database = None
     app.include_router(health_router)
     app.include_router(api_router, prefix=API_V1_PREFIX)
     register_exception_handlers(app)
