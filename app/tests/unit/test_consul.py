@@ -86,6 +86,7 @@ async def test_register_sends_service_check_and_read_only_traefik_tags(
     assert set(registration["Tags"]) == {
         "traefik.enable=true",
         "traefik.http.routers.persistencia.rule=Host(`persistencia.universidad.localhost`) && Method(`GET`)",
+        "traefik.http.routers.persistencia.entrypoints=https",
         "traefik.http.routers.persistencia.tls=true",
         "traefik.http.routers.persistencia.middlewares=persistencia-retry",
         "traefik.http.middlewares.persistencia-retry.retry.attempts=2",

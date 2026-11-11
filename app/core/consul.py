@@ -21,6 +21,7 @@ MAX_RETRY_DELAY = 30.0
 TRAEFIK_TAGS = (
     "traefik.enable=true",
     "traefik.http.routers.persistencia.rule=Host(`persistencia.universidad.localhost`) && Method(`GET`)",
+    "traefik.http.routers.persistencia.entrypoints=https",
     "traefik.http.routers.persistencia.tls=true",
     "traefik.http.routers.persistencia.middlewares=persistencia-retry",
     "traefik.http.middlewares.persistencia-retry.retry.attempts=2",
