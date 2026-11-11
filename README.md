@@ -345,7 +345,9 @@ completa rechazaría peticiones legítimas.
 ### 4.1 Requisitos
 
 - [uv](https://docs.astral.sh/uv/)
-- Docker, para el servicio de MongoDB
+- Una instancia de MongoDB disponible externamente, en la red local o en un contenedor
+  compartido. Este repositorio no incluye ni administra la infraestructura de base de
+  datos.
 
 ### 4.2 Procedimiento
 
@@ -354,12 +356,15 @@ git clone https://github.com/LautaroAllolio/PaperSoul-Microservicio-Persistencia
 cd PaperSoul-Microservicio-Persistencia
 
 uv sync                  # instala dependencias y el grupo dev; respeta uv.lock
-cp .env.example .env     # plantilla; ajustar solo si se modifica la URI
-
-docker compose up -d mongo    # MongoDB en 127.0.0.1:27017
+cp .env.example .env     # configurar MONGODB_URI con la dirección de MongoDB
 
 uv run uvicorn app.main:app --reload --port 8000
 ```
+
+`MONGODB_URI` debe apuntar a una instancia accesible desde el entorno donde se ejecuta
+la aplicación; por ejemplo, `mongodb://localhost:27017` para MongoDB en la máquina
+local, o la dirección del servicio compartido en la red local. No se inicia MongoDB
+desde este repositorio.
 
 Verificación:
 
@@ -381,13 +386,15 @@ configurados en ese entorno.
 ### 4.3 Ejecución mediante contenedor
 
 ```bash
-docker compose up -d     # MongoDB y mongo-express en el puerto 8081
-
 docker build -t papersoul-persistencia .
 docker run --rm -p 8000:8000 \
-  -e MONGODB_URI=mongodb://host.docker.internal:27017 \
+  -e MONGODB_URI=mongodb://mongo-compartido:27017 \
   papersoul-persistencia
 ```
+
+`mongo-compartido` representa el nombre DNS o la dirección de una instancia externa
+alcanzable desde el contenedor (por ejemplo, en una red Docker compartida). Ajusta la
+URI según la configuración de red del entorno.
 
 La imagen se construye en etapas múltiples y se ejecuta como usuario sin privilegios.
 El parámetro `--host 0.0.0.0` resulta obligatorio: dentro del contenedor `127.0.0.1` no
@@ -516,9 +523,11 @@ cualquier exposición externa son:
 2. **Autenticación en el perímetro** —pasarela, malla de servicios o *middleware* de
    FastAPI—. Debe contemplarse que el recurso `/health` continúe siendo accesible sin
    credenciales, a fin de que el orquestador pueda consultarlo.
-3. **No publicar `mongo-express`.** Expone la base de datos sin autenticación.
-4. **MongoDB enlazado a la interfaz de loopback.** `docker-compose.yml` publica
-   `127.0.0.1:27017` y no `0.0.0.0`; no debe alterarse.
+3. **No exponer herramientas de administración de MongoDB** —como mongo-express— a
+   redes no confiables.
+4. **Mantener MongoDB en una red privada**, accesible únicamente por los servicios que
+   la necesitan. No publicar el puerto de la base de datos en interfaces de red
+   públicas.
 
 Los ficheros `.env` se encuentran excluidos del control de versiones; únicamente se
 versiona `.env.example`. Las credenciales no deben incorporarse al repositorio.

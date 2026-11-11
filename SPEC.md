@@ -54,7 +54,7 @@ el monolito), exactamente 7 campos:
 |---|---|---|
 | **D-1** Algoritmo y formato del hash | SHA-256, hexadecimal, **exactamente 64 caracteres en minúsculas**. `pdf_hash` y `text_hash` siguen el mismo formato. | El patrón es `^[0-9a-f]{64}$` — **sin flag `i`**. El uppercase se rechaza con 422 en vez de normalizarse en silencio: un `pdfHash` en mayúsculas es un bug del productor, y normalizarlo escondería ese bug justo en el campo que garantiza la deduplicación |
 | **D-2** `Content-Type` incorrecto | **415 Unsupported Media Type**, no 400 | Desviación consciente del listado del enunciado. RFC 9110 §15.5.16 reserva 415 para "el formato de los datos no es soportado por el servidor"; 400 significaría que el servidor *entendió* el `Content-Type` y lo rechazó, que es falso. **Riesgo**: si `Extraer` tiene un cliente HTTP mal configurado, 415 es menos intuitivo que 400 al depurar |
-| **D-3** Autenticación | **Ninguna.** Red interna de microservicios | La API no implementa auth, ni tokens, ni mTLS. **Consecuencia**: el servicio no puede exponerse fuera de la red privada sin añadir autenticación primero. Documentado en `docker-compose.yml` (`ports` loopback) y en el README como advertencia operativa |
+| **D-3** Autenticación | **Ninguna.** Red interna de microservicios | La API no implementa auth, ni tokens, ni mTLS. **Consecuencia**: el servicio no puede exponerse fuera de la red privada sin añadir autenticación primero. Documentado en el README como advertencia operativa |
 
 ### 1.2 Restricciones que imponen los datos
 
@@ -121,12 +121,12 @@ Con Beanie 1.30 **funcionaría**, pero es un mock de "mejor esfuerzo" que no rep
 |---|---|
 | `uv` 0.11.3 | ✅ Instalado |
 | Python del sistema | 3.12.3 (uv descargará 3.11 según `.python-version`) |
-| **Docker / Docker Compose** | ❌ **NO instalado en esta máquina** |
+| Docker | ❌ **NO instalado en esta máquina** |
 
-**Impacto:** `uv run pytest -m "not integration"` funciona ya. `uv run pytest` completo y
-`docker compose up -d mongo` **no** funcionarán hasta instalar Docker Desktop. Los tests de integración
-no se pueden verificar localmente hasta entonces; en CI (GitHub Actions, `ubuntu-latest`) Docker sí
-está disponible. **Acción requerida del equipo: instalar Docker Desktop antes del lote S3.**
+**Impacto:** MongoDB debe estar disponible externamente y su URI se configura mediante
+`MONGODB_URI`. `uv run pytest -m "not integration"` no requiere Docker; los tests de
+integración usan Testcontainers y requieren Docker. La ejecución de la aplicación no
+levanta una base de datos ni depende de un archivo Compose.
 
 ---
 
@@ -141,9 +141,8 @@ uv run python -V             # 3.11.x
 uv run uvicorn app.main:app --reload --port 8000
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000   # sin reload (contenedor)
 
-# --- Base de datos local (requiere Docker) ---
-docker compose up -d mongo
-docker compose down -v
+# --- Base de datos ---
+# Configurar MONGODB_URI para una instancia MongoDB externa antes de iniciar la app.
 
 # --- Calidad (gate de pre-push) ---
 uv run ruff check .
@@ -173,7 +172,6 @@ PaperSoul-Microservicio-Persistencia/
 ├── .env.example              # Plantilla; .env NUNCA se commitea
 ├── .gitignore                # extendido: .venv, .env, .ruff_cache, .pytest_cache
 ├── Dockerfile
-├── docker-compose.yml        # MongoDB 7 + Mongo Express (dev, puertos en loopback)
 ├── SPEC.md                   # ← este documento
 ├── tasks/
 │   ├── plan.md               # Fase 2: diseño técnico
